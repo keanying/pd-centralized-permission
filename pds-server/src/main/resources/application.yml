@@ -1,0 +1,46 @@
+server:
+  port: ${PDS_PORT:9000}
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
+
+spring:
+  application:
+    name: pds-server
+  datasource:
+    url: ${PDS_DB_URL:jdbc:postgresql://localhost:5432/pds}
+    username: ${PDS_DB_USERNAME:pds}
+    password: ${PDS_DB_PASSWORD:}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  thymeleaf:
+    cache: true
+
+mybatis-plus:
+  global-config:
+    banner: false
+  configuration:
+    map-underscore-to-camel-case: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+pds:
+  # 认证中心对外地址（令牌 iss）。生产必须配置为 HTTPS 域名
+  issuer: ${PDS_ISSUER:http://localhost:9000}
+  jwt:
+    # 生产必须配置 PKCS12 签名密钥；为空时使用临时密钥（仅限开发）
+    keystore-path: ${PDS_JWT_KEYSTORE:}
+    keystore-password: ${PDS_JWT_KEYSTORE_PASSWORD:}
+    key-alias: ${PDS_JWT_KEY_ALIAS:pds}
+  login:
+    max-failed-attempts: 5
+    lock-duration: 30m
+  bootstrap:
+    admin-username: admin
+    admin-password: ${PDS_ADMIN_PASSWORD:}

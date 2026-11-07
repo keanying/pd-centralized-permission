@@ -1,0 +1,47 @@
+# 本地开发：内存数据库（H2，PostgreSQL 兼容模式），无需安装 PostgreSQL。重启后数据清空。
+spring:
+  datasource:
+    url: jdbc:h2:mem:pds;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  thymeleaf:
+    cache: false
+
+pds:
+  bootstrap:
+    admin-password: ${PDS_ADMIN_PASSWORD:Pds@Admin2026}
+    admin-must-change-password: false
+    clients:
+      # PDK 管理后台（授权码 + PKCE）
+      - client-id: pdk-console
+        client-secret: pdk-console-dev-secret
+        name: PDK 知识服务管理后台
+        app: pdk
+        grant-types: [authorization_code, refresh_token]
+        redirect-uris: [http://127.0.0.1:8000/auth/callback]
+        post-logout-redirect-uris: [http://127.0.0.1:8000/]
+        scopes: [openid, profile]
+      # PDA 接入网关（授权码 + PKCE；可跨应用取快照）
+      - client-id: pda-gateway
+        client-secret: pda-gateway-dev-secret
+        name: PDA 智能助手接入网关
+        app: pda
+        grant-types: [authorization_code, refresh_token, client_credentials]
+        redirect-uris: [http://127.0.0.1:8100/auth/callback]
+        scopes: [openid, profile, pds.authz.all, pds.audit]
+      # PDA 插件：以用户令牌换取访问 PDK 的短时票据（5 分钟）
+      - client-id: pda-plugin
+        client-secret: pda-plugin-dev-secret
+        name: PDA 插件（令牌交换）
+        app: pda
+        grant-types: ["urn:ietf:params:oauth:grant-type:token-exchange", client_credentials]
+        # 令牌交换时请求 {目标应用}.api 范围，例如访问 PDK 用 pdk.api
+        scopes: [pds.authz, pds.audit, pds.manifest, pdk.api]
+        access-token-ttl: 5m
+      # PDK 服务：查询权限快照、注册知识库资源、上报审计
+      - client-id: pdk-service
+        client-secret: pdk-service-dev-secret
+        name: PDK 知识服务（服务账号）
+        app: pdk
+        grant-types: [client_credentials]
+        scopes: [pds.authz, pds.resource, pds.manifest, pds.audit]

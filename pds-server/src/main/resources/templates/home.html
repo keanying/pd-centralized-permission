@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PDS 统一认证中心</title>
+  <link rel="icon" href="/assets/pds-app-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/pds.css">
+</head>
+<body>
+<main class="card">
+  <section class="brand">
+    <div class="logo"><img src="/assets/pds-logo.svg" alt="PDS 标志"><span>PDS</span></div>
+    <div>
+      <h1>已登录统一认证中心</h1>
+      <p>现在可以直接进入已接入的应用，无需再次登录。</p>
+    </div>
+    <div class="foot">PD 统一权限</div>
+  </section>
+  <section class="form">
+    <h2 th:text="'您好，' + ${username}">您好</h2>
+    <p class="sub">登录状态有效期内访问各应用将自动登录</p>
+    <form method="post" th:action="@{/logout}">
+      <button type="submit">退出登录</button>
+    </form>
+  </section>
+</main>
+</body>
+</html>

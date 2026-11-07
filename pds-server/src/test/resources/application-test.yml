@@ -1,0 +1,32 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:pds-test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+
+pds:
+  issuer: http://localhost
+  bootstrap:
+    admin-password: Pds@Admin2026
+    admin-must-change-password: false
+    clients:
+      - client-id: pda-gateway
+        client-secret: pda-gateway-secret
+        name: PDA 智能助手接入网关
+        app: pda
+        grant-types: [authorization_code, refresh_token]
+        redirect-uris: [http://127.0.0.1:8100/auth/callback]
+        scopes: [openid, profile]
+      - client-id: pda-plugin
+        client-secret: pda-plugin-secret
+        name: PDA 插件
+        app: pda
+        grant-types: ["urn:ietf:params:oauth:grant-type:token-exchange", client_credentials]
+        scopes: [pds.authz, pds.manifest, pds.audit, pdk.api]
+        access-token-ttl: 5m
+      - client-id: pdk-service
+        client-secret: pdk-service-secret
+        name: PDK 服务账号
+        app: pdk
+        grant-types: [client_credentials]
+        scopes: [pds.authz, pds.resource, pds.manifest, pds.audit]

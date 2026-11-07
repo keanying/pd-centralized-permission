@@ -19,11 +19,11 @@
 
 | 层次 | 选型 | 说明 |
 |---|---|---|
-| 语言与框架 | Java 21、Spring Boot 3.x | 虚拟线程提升 IO 并发 |
-| 认证中心 | Spring Authorization Server 1.3+ | OIDC Provider；1.3 起支持令牌交换（RFC 8693） |
-| 安全 | Spring Security 6 | 资源服务器、方法级鉴权 |
+| 语言与框架 | Java 21、Spring Boot 4.1 | 当前受支持的 Boot 主线；虚拟线程提升 IO 并发 |
+| 认证中心 | Spring Security 7.1 内置 OAuth2 授权服务器（原 Spring Authorization Server 已并入） | OIDC Provider；支持令牌交换（RFC 8693） |
+| 安全 | Spring Security 7.1 | 资源服务器、方法级鉴权 |
 | 会话 | Spring Session + Redis | 认证中心登录会话集中存储，支持多实例与强制下线 |
-| ORM | MyBatis-Plus | 自定义景区隔离拦截器 |
+| ORM | MyBatis-Plus 3.5（Boot 4 starter） | 一期景区隔离在服务层按数据范围过滤，二期加拦截器 |
 | 数据库 | MySQL 8 或 PostgreSQL 15（信创可选达梦 / 人大金仓） | 主从 |
 | 缓存 | Redis 7（集群） | 有效权限、快照、令牌黑名单、验证码、计数器 |
 | 消息 | PBS 消息总线（RocketMQ / Kafka） | 变更事件、审计事件 |
@@ -474,7 +474,29 @@ CREATE TABLE auth_user_perm (
 
 > 第 4 周交付 PDS 一期接口给 PDK 联调（登录、快照、资源注册）。
 
-## 17. 风险与对策
+## 17. 一期实现说明（代码已提交，与上文设计的差异）
+
+| 项目 | 一期实现 | 后续 |
+|---|---|---|
+| 部署形态 | `pds-server` 单一服务包含认证中心、管理 API、授权引擎、审计（模块化单体），`pds-authz-engine` 为独立纯 Java 模块 | 按 §3 拆分为独立服务 |
+| 有效权限缓存 | 全局授权版本号 `authz_version`：任何授权变更递增版本并在事务提交后清空本地缓存；多实例下最多 2 秒感知 | 按人物化 + 受影响人员增量重算 + MQ 事件（§5.3） |
+| 未声明数据范围 | 角色上某权限点未声明数据范围时，按"本人景区范围"处理（安全默认值，不视为全部） | — |
+| 令牌吊销 | `sys_user.token_epoch` + 资源服务器校验器；本实例立即生效，多实例 30 秒内 | `user.disabled` 事件推送 |
+| 应用准入 | 应用注册清单时自动生成 `{app}:access`；授权码请求阶段校验，无权限以 `access_denied` 返回应用 | — |
+| 令牌交换 | 目标应用须已注册，发起方客户端须登记 `{app}.api` 范围；票据 `aud`=目标应用、`act.sub`=发起方 | 支持 `actor_token` 委托 |
+| 审计存储 | PostgreSQL `audit_event` 表，SHA-256 哈希链，独立事务写入，提供完整性校验接口 | MQ + ClickHouse，SM3 可选 |
+| 字段脱敏 | 人员列表手机号默认掩码；快照中 `maskPolicies` 暂为空 | §7 完整实现 |
+| SDK | 暂无，接入方直接调用 REST | Java Starter、Python SDK（§10） |
+| 登录方式 | 账号密码 + 失败锁定 + 首次登录强制改密 | 短信、MFA、扫码、LDAP |
+
+实现中需要注意的约束：
+- 令牌自定义声明会随授权记录序列化存库，只能使用 JSON 自然类型与可变集合（`String`/`Integer`/`Boolean`、`ArrayList`/`LinkedHashMap`），否则刷新令牌、令牌交换时读取授权记录失败；`authz_ver` 因此以 int 输出。
+- 回调地址不能使用 `localhost`（OAuth 2.1 要求），本地开发使用 `127.0.0.1`。
+- "首次登录强制改密"过滤器必须排在 Spring Security 过滤器链之前，否则授权端点可在改密前签发授权码。
+
+测试：引擎单元测试 12 个；端到端集成测试 12 个（H2 与 PostgreSQL 16 均通过）。
+
+## 18. 风险与对策
 
 | 风险 | 对策 |
 |---|---|
