@@ -18,6 +18,8 @@ public class PdsProperties {
     private String issuer = "http://localhost:9000";
 
     private Jwt jwt = new Jwt();
+    private Console console = new Console();
+    private Cors cors = new Cors();
     private Login login = new Login();
     private Bootstrap bootstrap = new Bootstrap();
 
@@ -29,6 +31,32 @@ public class PdsProperties {
         private String keyAlias = "pds";
         /** 令牌中 scenic_scope 最多直接携带的景区数，超出则只携带 authz_ver，由快照获取。 */
         private int maxScenicInToken = 20;
+    }
+
+    /**
+     * PDS 管理后台（pds-web）。前端可单独部署，也可编译后随 PDS 一起发布（访问 {basePath}/）。
+     * 两种方式都通过运行时 config.js 配置，同一份前端构建产物可用于任意环境。
+     */
+    @Data
+    public static class Console {
+        /** 是否注册/同步管理后台客户端（公共客户端 + PKCE）。 */
+        private boolean enabled = true;
+        private String clientId = "pds-console";
+        /** 随 PDS 一起发布时的访问路径。 */
+        private String basePath = "/console";
+        /** 管理后台回调地址；为空时默认 {issuer}{basePath}/auth/callback。单独部署时填写前端域名下的回调地址。 */
+        private List<String> redirectUris = new ArrayList<>();
+        /** 退出登录后跳转地址；为空时默认 {issuer}{basePath}/。 */
+        private List<String> postLogoutRedirectUris = new ArrayList<>();
+        /** 前端调用 PDS 接口的地址；为空表示与页面同源（随 PDS 发布或经反向代理）。 */
+        private String apiBaseUrl = "";
+        private String title = "PDS 统一权限";
+    }
+
+    /** 跨域：前端单独部署且不经反向代理时，填写前端来源（如 https://pds-admin.example.com）。 */
+    @Data
+    public static class Cors {
+        private List<String> allowedOrigins = new ArrayList<>();
     }
 
     @Data
@@ -59,6 +87,8 @@ public class PdsProperties {
         private List<String> postLogoutRedirectUris = new ArrayList<>();
         private List<String> scopes = new ArrayList<>();
         private boolean requirePkce = true;
+        /** 公共客户端（浏览器单页应用，无密钥，强制 PKCE）。 */
+        private boolean publicClient;
         private Duration accessTokenTtl = Duration.ofMinutes(30);
         private Duration refreshTokenTtl = Duration.ofHours(8);
     }

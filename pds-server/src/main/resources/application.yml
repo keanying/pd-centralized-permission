@@ -38,6 +38,18 @@ pds:
     keystore-path: ${PDS_JWT_KEYSTORE:}
     keystore-password: ${PDS_JWT_KEYSTORE_PASSWORD:}
     key-alias: ${PDS_JWT_KEY_ALIAS:pds}
+  # 管理后台（pds-web）：可单独部署，也可编译后随 PDS 发布于 {base-path}/
+  console:
+    enabled: ${PDS_CONSOLE_ENABLED:true}
+    client-id: pds-console
+    base-path: /console
+    # 单独部署时填写前端回调地址，多个用逗号分隔；为空则为 {issuer}/console/auth/callback
+    redirect-uris: ${PDS_CONSOLE_REDIRECT_URIS:}
+    post-logout-redirect-uris: ${PDS_CONSOLE_POST_LOGOUT_URIS:}
+    api-base-url: ${PDS_CONSOLE_API_BASE_URL:}
+  # 前端单独部署且不经反向代理时的跨域来源，多个用逗号分隔
+  cors:
+    allowed-origins: ${PDS_CORS_ALLOWED_ORIGINS:}
   login:
     max-failed-attempts: 5
     lock-duration: 30m

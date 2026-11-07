@@ -62,6 +62,7 @@ public class AppService {
     private final PositionMapper positionMapper;
     private final UserGroupMapper groupMapper;
     private final ClientService clientService;
+    private final SubjectNames subjectNames;
     private final Guard guard;
     private final AuthzService authz;
     private final AuditService audit;
@@ -69,8 +70,9 @@ public class AppService {
     public AppService(AppInfoMapper appMapper, PermPointMapper pointMapper, ResourceTypeMapper typeMapper,
                       PermResourceMapper resourceMapper, ResourceGrantMapper grantMapper, UserPermMapper userPermMapper,
                       SysUserMapper userMapper, OrgUnitMapper orgMapper, PositionMapper positionMapper,
-                      UserGroupMapper groupMapper, ClientService clientService, Guard guard, AuthzService authz,
-                      AuditService audit) {
+                      UserGroupMapper groupMapper, ClientService clientService, SubjectNames subjectNames, Guard guard,
+                      AuthzService authz, AuditService audit) {
+        this.subjectNames = subjectNames;
         this.appMapper = appMapper;
         this.pointMapper = pointMapper;
         this.typeMapper = typeMapper;
@@ -89,9 +91,61 @@ public class AppService {
 
     // ------------------------------------------------------------------ 应用与清单
 
-    public List<AppInfo> apps() {
+    public List<AppDtos.AppView> apps() {
         guard.require(PdsPermissions.ROLE_VIEW);
-        return appMapper.selectList(new LambdaQueryWrapper<AppInfo>().orderByAsc(AppInfo::getCode));
+        Map<String, Long> perms = pointMapper.selectList(new LambdaQueryWrapper<PermPoint>().select(PermPoint::getAppCode)
+                .eq(PermPoint::getStatus, 1)).stream().collect(Collectors.groupingBy(PermPoint::getAppCode, Collectors.counting()));
+        Map<String, Long> types = typeMapper.selectList(new LambdaQueryWrapper<>()).stream()
+                .collect(Collectors.groupingBy(ResourceType::getAppCode, Collectors.counting()));
+        Map<String, Long> clientCounts = clientService.countByApp();
+        return appMapper.selectList(new LambdaQueryWrapper<AppInfo>().orderByAsc(AppInfo::getCode)).stream()
+                .map(a -> new AppDtos.AppView(a.getCode(), a.getName(), a.getDescription(), a.getCategory(),
+                        a.getCategory() == null ? "未分类" : AppCategories.ALL.getOrDefault(a.getCategory(), a.getCategory()),
+                        Boolean.TRUE.equals(a.getAccessControl()), a.getManifestVersion(),
+                        perms.getOrDefault(a.getCode(), 0L), types.getOrDefault(a.getCode(), 0L),
+                        clientCounts.getOrDefault(a.getCode(), 0L)))
+                .toList();
+    }
+
+    public List<ResourceType> resourceTypes(String app) {
+        guard.require(PdsPermissions.ROLE_VIEW);
+        return typeMapper.selectList(new LambdaQueryWrapper<ResourceType>()
+                .eq(app != null, ResourceType::getAppCode, app).orderByAsc(ResourceType::getTypeCode));
+    }
+
+    public List<AppDtos.ClientView> clients(String app) {
+        guard.require(PdsPermissions.APP_MANAGE);
+        return clientService.listByApp(app);
+    }
+
+    /** 资源实例列表（按类型、名称筛选），用于资源授权页。 */
+    public com.pd.pds.common.PageResult<AppDtos.ResourceView> resources(String type, String keyword, long page, long size) {
+        guard.require(PdsPermissions.ROLE_VIEW);
+        LambdaQueryWrapper<PermResource> w = new LambdaQueryWrapper<PermResource>()
+                .eq(type != null && !type.isBlank(), PermResource::getTypeCode, type)
+                .and(keyword != null && !keyword.isBlank(), q -> q.like(PermResource::getName, keyword).or().like(PermResource::getRefId, keyword))
+                .orderByAsc(PermResource::getTypeCode).orderByAsc(PermResource::getName);
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<PermResource> p =
+                resourceMapper.selectPage(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size), w);
+        Set<String> ids = p.getRecords().stream().map(PermResource::getId).collect(Collectors.toSet());
+        Map<String, Long> grantCounts = ids.isEmpty() ? Map.of() : grantMapper.selectList(new LambdaQueryWrapper<ResourceGrant>()
+                .select(ResourceGrant::getResourceId).in(ResourceGrant::getResourceId, ids)).stream()
+                .collect(Collectors.groupingBy(ResourceGrant::getResourceId, Collectors.counting()));
+        List<AppDtos.ResourceView> items = p.getRecords().stream().map(r -> new AppDtos.ResourceView(r.getId(), r.getTypeCode(),
+                r.getRefId(), r.getName(), r.getScenicId(), scenicName(r.getScenicId()), r.getOwnerId(),
+                grantCounts.getOrDefault(r.getId(), 0L), r.getUpdatedAt())).toList();
+        return new com.pd.pds.common.PageResult<>(p.getTotal(), page, size, items);
+    }
+
+    private String scenicName(String scenicId) {
+        if (scenicId == null) {
+            return null;
+        }
+        if ("GROUP".equals(scenicId)) {
+            return "集团共享";
+        }
+        OrgUnit o = orgMapper.selectById(scenicId);
+        return o == null ? scenicId : o.getName();
     }
 
     public List<PermPoint> permissions(String app) {
@@ -275,11 +329,16 @@ public class AppService {
 
     // ------------------------------------------------------------------ 资源授权
 
-    public List<ResourceGrant> grants(String type, String refId) {
+    public List<AppDtos.GrantView> grants(String type, String refId) {
         PermResource r = requireResource(type, refId);
         requireGrantOperator(r, ResourceAction.READ);
         return grantMapper.selectList(new LambdaQueryWrapper<ResourceGrant>().eq(ResourceGrant::getResourceId, r.getId())
-                .orderByAsc(ResourceGrant::getCreatedAt));
+                        .orderByAsc(ResourceGrant::getCreatedAt)).stream()
+                .map(g -> new AppDtos.GrantView(g.getId(), g.getSubjectType(), g.getSubjectId(),
+                        subjectNames.nameOf(g.getSubjectType(), g.getSubjectId()), Boolean.TRUE.equals(g.getIncludeChildren()),
+                        g.getAction(), g.getEffect(), g.getValidFrom(), g.getValidTo(), g.getReason(), g.getGrantedBy(),
+                        subjectNames.userName(g.getGrantedBy()), g.getCreatedAt()))
+                .toList();
     }
 
     /**
@@ -391,7 +450,8 @@ public class AppService {
         String secret = clientService.create(new ClientService.Spec(req.clientId(), null, req.name(), app, req.grantTypes(),
                 req.redirectUris(), req.postLogoutRedirectUris(), req.scopes(), req.requirePkce() == null || req.requirePkce(),
                 req.accessTokenMinutes() == null ? null : Duration.ofMinutes(req.accessTokenMinutes()),
-                req.refreshTokenHours() == null ? null : Duration.ofHours(req.refreshTokenHours())));
+                req.refreshTokenHours() == null ? null : Duration.ofHours(req.refreshTokenHours()),
+                Boolean.TRUE.equals(req.publicClient())));
         auditAdmin("创建客户端", req.clientId(), Map.of("app", app, "grantTypes", req.grantTypes().toString()));
         return new AppDtos.ClientCredential(req.clientId(), secret, app);
     }

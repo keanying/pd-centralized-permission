@@ -20,7 +20,11 @@ import org.springframework.security.web.authentication.LoginUrlAuthenticationEnt
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.function.Consumer;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 /**
  * 三条过滤链：
@@ -51,6 +55,7 @@ public class SecurityConfig {
                     })));
                 })
                 .authorizeHttpRequests(a -> a.anyRequest().authenticated())
+                .cors(Customizer.withDefaults())
                 .oauth2ResourceServer(rs -> rs.jwt(j -> j.decoder(jwtDecoder)))
                 .exceptionHandling(e -> e.defaultAuthenticationEntryPointFor(
                         new LoginUrlAuthenticationEntryPoint("/login"), new MediaTypeRequestMatcher(MediaType.TEXT_HTML)));
@@ -61,6 +66,7 @@ public class SecurityConfig {
     @Order(2)
     public SecurityFilterChain apiChain(HttpSecurity http, JwtDecoder jwtDecoder) throws Exception {
         http.securityMatcher("/api/**")
+                .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(a -> a.anyRequest().authenticated())
                 .oauth2ResourceServer(rs -> rs
                         .jwt(j -> j.decoder(jwtDecoder))
@@ -76,12 +82,29 @@ public class SecurityConfig {
     public SecurityFilterChain webChain(HttpSecurity http, LoginHandlers handlers) throws Exception {
         http.authorizeHttpRequests(a -> a
                         .requestMatchers("/login", "/assets/**", "/favicon.ico", "/error", "/actuator/health", "/actuator/health/**").permitAll()
+                        // 管理后台静态资源与运行时配置（数据接口另由 /api/** 鉴权）
+                        .requestMatchers("/console", "/console/**").permitAll()
                         .anyRequest().authenticated())
                 .formLogin(f -> f.loginPage("/login")
                         .successHandler(handlers.successHandler())
                         .failureHandler(handlers.failureHandler()))
                 .logout(l -> l.logoutSuccessUrl("/login?logout"));
         return http.build();
+    }
+
+    /**
+     * 跨域：仅在前端单独部署且不经反向代理时需要，来源由 pds.cors.allowed-origins 配置；为空则不放行任何跨域请求。
+     */
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource(PdsProperties props) {
+        CorsConfiguration cfg = new CorsConfiguration();
+        cfg.setAllowedOrigins(props.getCors().getAllowedOrigins());
+        cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        cfg.setAllowedHeaders(List.of("Authorization", "Content-Type", "Idempotency-Key", "X-Request-Id"));
+        cfg.setMaxAge(3600L);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", cfg);
+        return source;
     }
 
     private static void json(jakarta.servlet.http.HttpServletResponse res, HttpStatus status, int code, String message)

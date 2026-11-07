@@ -53,6 +53,18 @@ public class GroupService {
                 .toList();
     }
 
+    public List<Map<String, String>> members(String groupId) {
+        guard.require(PdsPermissions.USER_VIEW);
+        List<String> ids = memberMapper.selectList(new LambdaQueryWrapper<GroupMember>().eq(GroupMember::getGroupId, groupId))
+                .stream().map(GroupMember::getUserId).toList();
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return userMapper.selectByIds(ids).stream()
+                .map(u -> Map.of("id", u.getId(), "name", u.getName(), "username", u.getUsername()))
+                .toList();
+    }
+
     @Transactional
     public UserGroup create(GroupDtos.CreateGroup req) {
         guard.require(PdsPermissions.GROUP_MANAGE);

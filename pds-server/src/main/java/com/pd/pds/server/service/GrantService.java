@@ -58,14 +58,16 @@ public class GrantService {
     private final UserOrgMapper userOrgMapper;
     private final OrgUnitMapper orgMapper;
     private final AppService appService;
+    private final SubjectNames subjectNames;
     private final Guard guard;
     private final AuthzService authz;
     private final AuditService audit;
 
     public GrantService(UserPermMapper userPermMapper, PermPointMapper pointMapper, PermResourceMapper resourceMapper,
                         ResourceTypeMapper typeMapper, UserScenicMapper userScenicMapper, SecurityLevelSettingMapper levelMapper,
-                        UserOrgMapper userOrgMapper, OrgUnitMapper orgMapper, AppService appService, Guard guard,
-                        AuthzService authz, AuditService audit) {
+                        UserOrgMapper userOrgMapper, OrgUnitMapper orgMapper, AppService appService,
+                        SubjectNames subjectNames, Guard guard, AuthzService authz, AuditService audit) {
+        this.subjectNames = subjectNames;
         this.userPermMapper = userPermMapper;
         this.pointMapper = pointMapper;
         this.resourceMapper = resourceMapper;
@@ -134,11 +136,22 @@ public class GrantService {
                 perms, resources, authz.version());
     }
 
-    public List<UserPerm> listUserPerms(String userId) {
-        guard.require(PdsPermissions.GRANT_MANAGE);
-        assertManageable(authz.requireUser(userId), PdsPermissions.GRANT_MANAGE);
+    public List<RoleDtos.UserPermView> listUserPerms(String userId) {
+        if (!guard.has(PdsPermissions.AUTHZ_QUERY) && !guard.has(PdsPermissions.GRANT_MANAGE)) {
+            guard.require(PdsPermissions.GRANT_MANAGE);
+        }
+        assertManageable(authz.requireUser(userId), guard.has(PdsPermissions.GRANT_MANAGE) ? PdsPermissions.GRANT_MANAGE : PdsPermissions.AUTHZ_QUERY);
         return userPermMapper.selectList(new LambdaQueryWrapper<UserPerm>().eq(UserPerm::getUserId, userId)
-                .orderByDesc(UserPerm::getCreatedAt));
+                        .orderByDesc(UserPerm::getCreatedAt)).stream()
+                .map(up -> {
+                    PermResource r = up.getResourceId() == null ? null : resourceMapper.selectById(up.getResourceId());
+                    PermPoint p = up.getPermCode() == null ? null : pointMapper.selectById(up.getPermCode());
+                    return new RoleDtos.UserPermView(up.getId(), up.getPermCode(), p == null ? null : p.getName(),
+                            r == null ? null : r.getTypeCode(), r == null ? null : r.getRefId(), r == null ? null : r.getName(),
+                            up.getAction(), up.getEffect(), up.getDataScope(), up.getScopeValues(), up.getValidFrom(),
+                            up.getValidTo(), up.getReason(), subjectNames.userName(up.getGrantedBy()), up.getCreatedAt());
+                })
+                .toList();
     }
 
     // ------------------------------------------------------------------ 直接授予 / 禁止

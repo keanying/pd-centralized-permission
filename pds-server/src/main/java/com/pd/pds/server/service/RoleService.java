@@ -39,12 +39,15 @@ public class RoleService {
     private final RoleBindingMapper bindingMapper;
     private final PermPointMapper pointMapper;
     private final AppService appService;
+    private final SubjectNames subjectNames;
     private final Guard guard;
     private final AuthzService authz;
     private final AuditService audit;
 
     public RoleService(RoleMapper roleMapper, RolePermMapper rolePermMapper, RoleBindingMapper bindingMapper,
-                       PermPointMapper pointMapper, AppService appService, Guard guard, AuthzService authz, AuditService audit) {
+                       PermPointMapper pointMapper, AppService appService, SubjectNames subjectNames, Guard guard,
+                       AuthzService authz, AuditService audit) {
+        this.subjectNames = subjectNames;
         this.roleMapper = roleMapper;
         this.rolePermMapper = rolePermMapper;
         this.bindingMapper = bindingMapper;
@@ -154,11 +157,28 @@ public class RoleService {
         return get(roleId);
     }
 
-    public List<RoleBinding> bindings(String roleId) {
+    public List<RoleDtos.BindingView> bindings(String roleId) {
         guard.require(PdsPermissions.ROLE_VIEW);
         require(roleId);
         return bindingMapper.selectList(new LambdaQueryWrapper<RoleBinding>().eq(RoleBinding::getRoleId, roleId)
-                .orderByAsc(RoleBinding::getCreatedAt));
+                        .orderByAsc(RoleBinding::getCreatedAt)).stream()
+                .map(b -> new RoleDtos.BindingView(b.getId(), b.getRoleId(), b.getSubjectType(), b.getSubjectId(),
+                        subjectNames.nameOf(b.getSubjectType(), b.getSubjectId()), Boolean.TRUE.equals(b.getIncludeChildren()),
+                        b.getValidFrom(), b.getValidTo(), subjectNames.userName(b.getCreatedBy()), b.getCreatedAt()))
+                .toList();
+    }
+
+    /** 某主体（人员/岗位/组织/用户组）直接绑定的角色。 */
+    public List<RoleDtos.BindingView> bindingsOfSubject(String subjectType, String subjectId) {
+        guard.require(PdsPermissions.ROLE_VIEW);
+        Map<String, String> roleNames = roleMapper.selectList(new LambdaQueryWrapper<>()).stream()
+                .collect(Collectors.toMap(Role::getId, Role::getName));
+        return bindingMapper.selectList(new LambdaQueryWrapper<RoleBinding>().eq(RoleBinding::getSubjectType, subjectType)
+                        .eq(RoleBinding::getSubjectId, subjectId)).stream()
+                .map(b -> new RoleDtos.BindingView(b.getId(), b.getRoleId(), b.getSubjectType(), b.getSubjectId(),
+                        roleNames.getOrDefault(b.getRoleId(), b.getRoleId()), Boolean.TRUE.equals(b.getIncludeChildren()),
+                        b.getValidFrom(), b.getValidTo(), subjectNames.userName(b.getCreatedBy()), b.getCreatedAt()))
+                .toList();
     }
 
     @Transactional

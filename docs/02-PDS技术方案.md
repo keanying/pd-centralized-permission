@@ -31,7 +31,7 @@
 | 配置/注册 | PBS 注册与配置（如 Nacos） | |
 | 加密 | JCA + BouncyCastle | 支持 RSA/ECDSA 与国密 SM2/SM3/SM4 |
 | 可观测 | Micrometer + Prometheus、OpenTelemetry、日志接入 PBS 监控 | |
-| 前端（后续） | Vue3 + Element Plus | 统一登录页、管理后台、个人中心 |
+| 前端 | Vue 3 + TypeScript + Vite；组件 View UI Plus（iView 的 Vue 3 版本）；图标 Semi Design（Vue 3 版本）；动效 Inspira UI；Tailwind CSS 4；ECharts | 管理后台 `pds-web` 为独立工程：可单独部署（Docker/Nginx），也可 `mvn -Pweb` 编译后随 PDS 发布于 `/console/`；运行时配置 `config.js` |
 
 ## 3. 模块架构
 
@@ -487,6 +487,7 @@ CREATE TABLE auth_user_perm (
 | 审计存储 | PostgreSQL `audit_event` 表，SHA-256 哈希链，独立事务写入，提供完整性校验接口 | MQ + ClickHouse，SM3 可选 |
 | 字段脱敏 | 人员列表手机号默认掩码；快照中 `maskPolicies` 暂为空 | §7 完整实现 |
 | SDK | 暂无，接入方直接调用 REST | Java Starter、Python SDK（§10） |
+| 管理后台 | `pds-web`：工作台、组织架构、人员、用户组、角色、人员明细权限、资源授权、应用、审计、个人中心；公共客户端 `pds-console`（PKCE，无密钥）；`pds.console.*` 与 `pds.cors.*` 配置化 | 字段脱敏、权限申请审批等二期页面 |
 | 登录方式 | 账号密码 + 失败锁定 + 首次登录强制改密 | 短信、MFA、扫码、LDAP |
 
 实现中需要注意的约束：

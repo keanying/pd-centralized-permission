@@ -36,6 +36,11 @@ public class GroupController {
         return R.ok(groups.create(req));
     }
 
+    @GetMapping("/{id}/members")
+    public R<List<java.util.Map<String, String>>> listMembers(@PathVariable String id) {
+        return R.ok(groups.members(id));
+    }
+
     @PutMapping("/{id}/members")
     public R<Void> members(@PathVariable String id, @Valid @RequestBody GroupDtos.SetMembers req) {
         groups.setMembers(id, req);

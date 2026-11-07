@@ -1,0 +1,40 @@
+/* Tailwind（不引入 preflight，避免覆盖 View UI Plus 组件样式），供 Inspira UI 组件与布局使用 */
+@layer viewui, theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@theme {
+  --color-brand: #1E50E6;
+  --color-brand-dark: #1438B0;
+  --color-brand-soft: #E8EEFD;
+  --color-accent: #22E59A;
+  --color-accent-dark: #0F9F69;
+  --color-ink: #0B1B4D;
+  --color-page: #F3F6FD;
+  --color-line: #E4E9F4;
+  --color-muted: #6B7280;
+}
+
+html, body, #app { height: 100%; margin: 0; }
+body {
+  background: var(--color-page);
+  color: #1F2937;
+  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 通用卡片 */
+.pds-card {
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 6px 24px rgba(11, 27, 77, .06);
+  padding: 20px 24px;
+}
+.pds-card-title {
+  font-size: 16px; font-weight: 600; color: var(--color-ink); margin: 0 0 16px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.pds-muted { color: var(--color-muted); font-size: 12px; }
+.pds-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 16px; }
+.pds-toolbar .grow { flex: 1; }
+.pds-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }

@@ -21,7 +21,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 
 /**
  * OAuth 客户端（接入应用）管理。客户端密钥只在创建时返回一次，库中仅存哈希。
@@ -49,7 +52,7 @@ public class ClientService {
 
     public record Spec(String clientId, String secret, String name, String app, List<String> grantTypes,
                        List<String> redirectUris, List<String> postLogoutRedirectUris, List<String> scopes,
-                       boolean requirePkce, Duration accessTokenTtl, Duration refreshTokenTtl) {
+                       boolean requirePkce, Duration accessTokenTtl, Duration refreshTokenTtl, boolean publicClient) {
     }
 
     public boolean exists(String clientId) {
@@ -73,14 +76,22 @@ public class ClientService {
         if (spec.grantTypes().contains("authorization_code") && (spec.redirectUris() == null || spec.redirectUris().isEmpty())) {
             throw new BizException(ErrorCode.VALIDATION_FAILED, "授权码方式必须配置回调地址");
         }
-        String secret = spec.secret() != null ? spec.secret() : newSecret();
+        if (spec.publicClient() && !spec.grantTypes().stream().allMatch(g -> g.equals("authorization_code") || g.equals("refresh_token"))) {
+            throw new BizException(ErrorCode.VALIDATION_FAILED, "公共客户端（浏览器单页应用）只能使用授权码方式");
+        }
+        String secret = spec.publicClient() ? null : (spec.secret() != null ? spec.secret() : newSecret());
         RegisteredClient.Builder b = RegisteredClient.withId(UUID.randomUUID().toString())
                 .clientId(spec.clientId())
                 .clientName(spec.name())
-                .clientIdIssuedAt(Instant.now())
-                .clientSecret(passwordEncoder.encode(secret))
-                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST);
+                .clientIdIssuedAt(Instant.now());
+        if (spec.publicClient()) {
+            // 浏览器单页应用：无密钥，强制 PKCE；授权服务器不向公共客户端签发刷新令牌
+            b.clientAuthenticationMethod(ClientAuthenticationMethod.NONE);
+        } else {
+            b.clientSecret(passwordEncoder.encode(secret))
+                    .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                    .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST);
+        }
         spec.grantTypes().forEach(g -> b.authorizationGrantType(new AuthorizationGrantType(g)));
         if (spec.redirectUris() != null) {
             spec.redirectUris().forEach(b::redirectUri);
@@ -93,7 +104,7 @@ public class ClientService {
                 : spec.scopes();
         scopes.forEach(b::scope);
         b.clientSettings(ClientSettings.builder()
-                .requireProofKey(spec.requirePkce() && spec.grantTypes().contains("authorization_code"))
+                .requireProofKey((spec.publicClient() || spec.requirePkce()) && spec.grantTypes().contains("authorization_code"))
                 .requireAuthorizationConsent(false)
                 .build());
         b.tokenSettings(TokenSettings.builder()
@@ -108,6 +119,43 @@ public class ClientService {
         link.setCreatedAt(Instant.now());
         appClientMapper.insert(link);
         return secret;
+    }
+
+    public Map<String, Long> countByApp() {
+        return appClientMapper.selectList(new LambdaQueryWrapper<>()).stream()
+                .collect(Collectors.groupingBy(AppClient::getAppCode, Collectors.counting()));
+    }
+
+    public List<com.pd.pds.server.web.dto.AppDtos.ClientView> listByApp(String app) {
+        return appClientMapper.selectList(new LambdaQueryWrapper<AppClient>().eq(app != null, AppClient::getAppCode, app)
+                        .orderByAsc(AppClient::getClientId)).stream()
+                .map(link -> clients.findByClientId(link.getClientId()))
+                .filter(java.util.Objects::nonNull)
+                .map(c -> new com.pd.pds.server.web.dto.AppDtos.ClientView(c.getClientId(), c.getClientName(), appOf(c.getClientId()),
+                        c.getAuthorizationGrantTypes().stream().map(AuthorizationGrantType::getValue).sorted().toList(),
+                        c.getRedirectUris().stream().sorted().toList(), c.getScopes().stream().sorted().toList(),
+                        c.getClientAuthenticationMethods().contains(ClientAuthenticationMethod.NONE), c.getClientIdIssuedAt()))
+                .toList();
+    }
+
+    /** 同步已有客户端的回调地址与退出后跳转地址（配置化客户端，如 PDS 管理后台）。 */
+    @Transactional
+    public void syncRedirectUris(String clientId, List<String> redirectUris, List<String> postLogoutRedirectUris) {
+        RegisteredClient existing = clients.findByClientId(clientId);
+        if (existing == null) {
+            return;
+        }
+        RegisteredClient updated = RegisteredClient.from(existing)
+                .redirectUris(set -> {
+                    set.clear();
+                    set.addAll(redirectUris);
+                })
+                .postLogoutRedirectUris(set -> {
+                    set.clear();
+                    set.addAll(postLogoutRedirectUris);
+                })
+                .build();
+        clients.save(updated);
     }
 
     /** 客户端所属应用；未登记时返回 null。 */

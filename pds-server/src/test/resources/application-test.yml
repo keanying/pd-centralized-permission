@@ -6,6 +6,8 @@ spring:
 
 pds:
   issuer: http://localhost
+  console:
+    redirect-uris: [http://127.0.0.1:5173/auth/callback]
   bootstrap:
     admin-password: Pds@Admin2026
     admin-must-change-password: false

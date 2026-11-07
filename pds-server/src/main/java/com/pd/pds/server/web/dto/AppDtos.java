@@ -45,10 +45,28 @@ public final class AppDtos {
                                @NotNull List<String> grantTypes,
                                List<String> redirectUris, List<String> postLogoutRedirectUris,
                                List<String> scopes, Boolean requirePkce,
-                               Integer accessTokenMinutes, Integer refreshTokenHours) {
+                               Integer accessTokenMinutes, Integer refreshTokenHours, Boolean publicClient) {
     }
 
     public record ClientCredential(String clientId, String clientSecret, String app) {
+    }
+
+    public record ClientView(String clientId, String name, String app, List<String> grantTypes, List<String> redirectUris,
+                             List<String> scopes, boolean publicClient, Instant issuedAt) {
+    }
+
+    public record AppView(String code, String name, String description, String category, String categoryName,
+                          boolean accessControl, String manifestVersion, long permissionCount, long resourceTypeCount,
+                          long clientCount) {
+    }
+
+    public record ResourceView(String id, String type, String refId, String name, String scenicId, String scenicName,
+                               String ownerId, long grantCount, Instant updatedAt) {
+    }
+
+    public record GrantView(String id, String subjectType, String subjectId, String subjectName, boolean includeChildren,
+                            String action, String effect, Instant validFrom, Instant validTo, String reason,
+                            String grantedBy, String grantedByName, Instant createdAt) {
     }
 
     public record GrantRequest(@NotBlank @Pattern(regexp = "USER|POSITION|ORG|GROUP") String subjectType,

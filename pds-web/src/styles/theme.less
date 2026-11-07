@@ -1,0 +1,21 @@
+// View UI Plus 主题：采用 PDS 品牌色。
+// 整体放入最低优先级的级联层 viewui，避免其全局重置（div { padding: 0 } 等）覆盖 Tailwind 工具类；
+// 主题变量必须写在层内的 @import 之后才能覆盖（Less 作用域规则）。
+@layer viewui {
+  @import 'view-ui-plus/src/styles/index.less';
+
+  @primary-color: #1E50E6;
+  @info-color: #1E50E6;
+  @success-color: #0F9F69;
+  @warning-color: #E8590C;
+  @error-color: #E5484D;
+  @link-color: #1E50E6;
+  @border-radius-base: 10px;
+  @border-radius-small: 6px;
+  @font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  @table-thead-bg: #F6F8FD;
+  @table-td-highlight-bg: #EEF3FE;
+  @btn-border-radius: 10px;
+  // 图标字体经 Vite 别名解析并随构建输出
+  @ionicons-font-path: "@viewui-fonts";
+}

@@ -4,7 +4,11 @@
 
 PDS 面向客户总体架构中的**全部系统**通用：应用层（票付通、景数通、数字大脑、畅游、各类 APP）、PDQ / PBI / PAP（PDA）、PDT / PDK / PDD、PDG、PDE、PDP / PDL / PDR、PDC、PBS。各系统按《[应用接入指南](docs/03-应用接入指南.md)》以同一方式接入。
 
-![PDS 统一登录页](docs/images/pds-login.png)
+| 统一登录 | 管理后台 · 工作台 |
+|---|---|
+| ![PDS 统一登录页](docs/images/pds-login.png) | ![管理后台工作台](docs/images/console-dashboard.png) |
+
+![人员明细权限](docs/images/console-user-grants.png)
 
 ## 文档
 
@@ -23,6 +27,7 @@ pd_centralized_permission/
 ├── pds-authz-engine/    # 有效权限计算引擎（纯 Java，无框架依赖）+ 单元测试
 ├── pds-server/          # Spring Boot 服务：OIDC 认证中心 + 管理 API + 鉴权开放 API + 审计
 │   └── src/main/resources/db/migration   # Flyway 表结构
+├── pds-web/             # 管理后台前端（Vue 3 + View UI Plus），可单独部署或随 PDS 发布，见 pds-web/README.md
 └── docs/
 ```
 
@@ -40,8 +45,8 @@ mvn -DskipTests package
 java -jar pds-server/target/pds-server-0.1.0-SNAPSHOT.jar --spring.profiles.active=local
 ```
 
-- 统一登录页：<http://localhost:9000/login>，初始账号 `admin`，密码 `Pds@Admin2026`（仅 `local` 配置）
-- OIDC 发现文档：<http://localhost:9000/.well-known/openid-configuration>
+- 统一登录页：<http://127.0.0.1:9000/login>，管理后台（需 `-Pweb` 打包）：<http://127.0.0.1:9000/console/>，初始账号 `admin`，密码 `Pds@Admin2026`（仅 `local` 配置）
+- OIDC 发现文档：<http://127.0.0.1:9000/.well-known/openid-configuration>
 - `local` 配置预置了 `pdk-console`、`pda-gateway`、`pda-plugin`、`pdk-service` 四个开发用客户端，见 `pds-server/src/main/resources/application-local.yml`
 
 ### 使用 PostgreSQL
@@ -60,6 +65,15 @@ java -jar pds-server/target/pds-server-0.1.0-SNAPSHOT.jar
 keytool -genkeypair -alias pds -keyalg RSA -keysize 2048 -validity 3650 -storetype PKCS12 -keystore jwt.p12 -dname "CN=PDS"
 ```
 
+### 管理后台（pds-web）
+
+前端是独立工程，两种部署方式，环境差异通过运行时 `config.js` 配置（详见 [pds-web/README.md](pds-web/README.md)）：
+
+- **随 PDS 一起发布**：`mvn -Pweb package`，访问 `{PDS}/console/`，`config.js` 由 PDS 按 `pds.console.*` 自动生成。
+- **单独部署**：`docker build -t pds-web pds-web`，按 `PDS_ISSUER`、`PDS_UPSTREAM` 等环境变量运行；PDS 侧配置 `pds.console.redirect-uris`（以及不经反向代理时的 `pds.cors.allowed-origins`）。
+
+本地开发：PDS 用 `local` 配置启动后，在 `pds-web` 下 `npm run dev`，访问 <http://127.0.0.1:5173/>。
+
 ### 运行测试
 
 ```bash
@@ -67,7 +81,7 @@ mvn test
 ```
 
 - `pds-authz-engine`：12 个引擎单元测试（禁止优先、组织继承、有效期、数据范围并集、资源动作层级、景区约束、密级、停用权限点、按应用过滤）
-- `pds-server`：12 个端到端集成测试（授权码 + PKCE 单点登录、首次登录强制改密、登录锁定、令牌交换、应用准入、权限清单、资源授权、人员明细禁止、鉴权开放接口、三员分立、停用即吊销、审计哈希链）
+- `pds-server`：13 个端到端集成测试（授权码 + PKCE 单点登录、管理后台公共客户端、首次登录强制改密、登录锁定、令牌交换、应用准入、权限清单、资源授权、人员明细禁止、鉴权开放接口、三员分立、停用即吊销、审计哈希链）
 
 指定 PostgreSQL 运行集成测试：
 
@@ -87,6 +101,7 @@ mvn -pl pds-server test -Dspring.datasource.url=jdbc:postgresql://localhost:5432
 | 资源 | `POST /api/v1/resources`、`DELETE /api/v1/resources/{type}/{refId}`、`GET/POST/DELETE /api/v1/resources/{type}/{refId}/grants` |
 | 角色 | `GET/POST /api/v1/roles`、`PUT /api/v1/roles/{id}/permissions`、`GET/POST /api/v1/roles/{id}/bindings`、`DELETE /api/v1/role-bindings/{id}` |
 | 人员明细权限 | `GET /api/v1/users/{id}/effective?app=`、`GET/POST/DELETE /api/v1/users/{id}/perms`、`PUT /api/v1/users/{id}/scenic-scope`、`PUT /api/v1/security-levels` |
+| 管理后台 | `GET /api/v1/dashboard/overview`、`GET /api/v1/resources`、`GET /api/v1/resource-types`、`GET /api/v1/apps/{app}/clients`、`GET /api/v1/role-bindings`、`GET /api/v1/groups/{id}/members`、`GET /console/config.js` |
 | 鉴权开放 | `POST /api/v1/authz/check`、`POST /api/v1/authz/batch-check`、`GET /api/v1/authz/snapshot`、`GET /api/v1/authz/explain`、`GET /api/v1/authz/resources/accessible` |
 | 审计 | `GET /api/v1/audit/events`、`GET /api/v1/audit/verify`、`POST /api/v1/audit/events`（应用上报） |
 | 个人中心 | `GET /api/v1/me`、`POST /api/v1/me/password` |

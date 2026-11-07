@@ -8,6 +8,15 @@ spring:
     cache: false
 
 pds:
+  # 本地统一使用 127.0.0.1（OAuth 2.1 不允许 localhost 作为回调主机）
+  issuer: http://127.0.0.1:9000
+  console:
+    # 本地同时支持：随 PDS 发布（http://127.0.0.1:9000/console/）与前端开发服务器（http://127.0.0.1:5173/）
+    redirect-uris: [http://127.0.0.1:9000/console/auth/callback, http://127.0.0.1:5173/auth/callback]
+    post-logout-redirect-uris: [http://127.0.0.1:9000/console/, http://127.0.0.1:5173/]
+  cors:
+    # 前端开发服务器直连 PDS（不经代理）时使用
+    allowed-origins: [http://127.0.0.1:5173]
   bootstrap:
     admin-password: ${PDS_ADMIN_PASSWORD:Pds@Admin2026}
     admin-must-change-password: false

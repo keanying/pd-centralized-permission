@@ -25,7 +25,8 @@ public class MustChangePasswordFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI().substring(request.getContextPath().length());
         return path.startsWith("/password/change") || path.startsWith("/logout") || path.startsWith("/assets/")
-                || path.startsWith("/api/") || path.startsWith("/login") || path.equals("/favicon.ico");
+                || path.startsWith("/api/") || path.startsWith("/login") || path.equals("/favicon.ico")
+                || path.startsWith("/console");
     }
 
     @Override

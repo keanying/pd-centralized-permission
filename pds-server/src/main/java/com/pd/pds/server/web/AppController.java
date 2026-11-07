@@ -1,10 +1,8 @@
 package com.pd.pds.server.web;
 
 import com.pd.pds.common.R;
-import com.pd.pds.server.entity.AppInfo;
 import com.pd.pds.server.entity.PermPoint;
 import com.pd.pds.server.entity.PermResource;
-import com.pd.pds.server.entity.ResourceGrant;
 import com.pd.pds.server.service.AppService;
 import com.pd.pds.server.web.dto.AppDtos;
 import jakarta.validation.Valid;
@@ -30,8 +28,32 @@ public class AppController {
     }
 
     @GetMapping("/apps")
-    public R<List<AppInfo>> apps() {
+    public R<List<AppDtos.AppView>> apps() {
         return R.ok(apps.apps());
+    }
+
+    @GetMapping("/apps/{app}/resource-types")
+    public R<List<com.pd.pds.server.entity.ResourceType>> resourceTypes(@PathVariable String app) {
+        return R.ok(apps.resourceTypes(app));
+    }
+
+    @GetMapping("/resource-types")
+    public R<List<com.pd.pds.server.entity.ResourceType>> allResourceTypes() {
+        return R.ok(apps.resourceTypes(null));
+    }
+
+    @GetMapping("/apps/{app}/clients")
+    public R<List<AppDtos.ClientView>> clients(@PathVariable String app) {
+        return R.ok(apps.clients(app));
+    }
+
+    @GetMapping("/resources")
+    public R<com.pd.pds.common.PageResult<AppDtos.ResourceView>> resources(
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String type,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String keyword,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "1") long page,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "20") long pageSize) {
+        return R.ok(apps.resources(type, keyword, page, Math.min(pageSize, 100)));
     }
 
     @GetMapping("/apps/{app}/permissions")
@@ -61,12 +83,12 @@ public class AppController {
     }
 
     @GetMapping("/resources/{type}/{refId}/grants")
-    public R<List<ResourceGrant>> grants(@PathVariable String type, @PathVariable String refId) {
+    public R<List<AppDtos.GrantView>> grants(@PathVariable String type, @PathVariable String refId) {
         return R.ok(apps.grants(type, refId));
     }
 
     @PostMapping("/resources/{type}/{refId}/grants")
-    public R<ResourceGrant> addGrant(@PathVariable String type, @PathVariable String refId,
+    public R<com.pd.pds.server.entity.ResourceGrant> addGrant(@PathVariable String type, @PathVariable String refId,
                                      @Valid @RequestBody AppDtos.GrantRequest req) {
         return R.ok(apps.addGrant(type, refId, req));
     }

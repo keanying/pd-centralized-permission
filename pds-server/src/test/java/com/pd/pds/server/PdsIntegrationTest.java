@@ -335,6 +335,44 @@ class PdsIntegrationTest {
         assertThat((Boolean) JsonPath.read(verify, "$.data.intact")).isTrue();
     }
 
+    @Test
+    @Order(40)
+    void 管理后台_公共客户端无密钥PKCE登录_工作台与列表接口() throws Exception {
+        String redirect = "http://127.0.0.1:5173/auth/callback";
+        String verifier = UUID.randomUUID() + "-" + UUID.randomUUID();
+        String challenge = Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(MessageDigest.getInstance("SHA-256").digest(verifier.getBytes(StandardCharsets.US_ASCII)));
+        String authorize = "/oauth2/authorize?response_type=code&client_id=pds-console&scope=openid%20profile&state=c1"
+                + "&redirect_uri=" + URLEncoder.encode(redirect, StandardCharsets.UTF_8)
+                + "&code_challenge=" + challenge + "&code_challenge_method=S256";
+        MockHttpSession session = new MockHttpSession();
+        mvc.perform(get(URI.create(authorize)).session(session).accept(MediaType.TEXT_HTML));
+        MvcResult r = mvc.perform(post("/login").session(session).param("username", "admin")
+                .param("password", "Pds@Admin2026").with(csrf())).andReturn();
+        r = mvc.perform(get(URI.create(r.getResponse().getRedirectedUrl())).session(session).accept(MediaType.TEXT_HTML)).andReturn();
+        String code = r.getResponse().getRedirectedUrl().replaceAll(".*[?&]code=([^&]+).*", "$1");
+        // 公共客户端：不带客户端密钥，凭 code_verifier 换取令牌
+        r = mvc.perform(post("/oauth2/token").param("grant_type", "authorization_code").param("client_id", "pds-console")
+                .param("code", code).param("redirect_uri", redirect).param("code_verifier", verifier)).andReturn();
+        assertThat(r.getResponse().getStatus()).as(r.getResponse().getContentAsString()).isEqualTo(200);
+        String token = JsonPath.read(r.getResponse().getContentAsString(), "$.access_token");
+
+        String overview = api(get("/api/v1/dashboard/overview"), token).getContentAsString();
+        assertThat((Integer) JsonPath.read(overview, "$.data.users")).isGreaterThanOrEqualTo(2);
+        assertThat((List<?>) JsonPath.read(overview, "$.data.loginTrend")).hasSize(7);
+
+        String apps = api(get("/api/v1/apps"), token).getContentAsString();
+        assertThat((List<String>) JsonPath.read(apps, "$.data[*].code")).contains("pds", "pdk", "pda");
+        String resources = api(get("/api/v1/resources?type=pdk:kb"), token).getContentAsString();
+        assertThat((List<String>) JsonPath.read(resources, "$.data.items[*].scenicName")).contains("集团共享", "景区A");
+        String grants = api(get("/api/v1/resources/pdk:kb/kb_common/grants"), token).getContentAsString();
+        assertThat((List<String>) JsonPath.read(grants, "$.data[*].subjectName")).contains("集团");
+
+        // 运行时配置（随 PDS 发布的管理后台）
+        String cfg = mvc.perform(get("/console/config.js")).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(cfg).contains("window.__PDS_CONFIG__").contains("\"clientId\":\"pds-console\"");
+    }
+
     // ------------------------------------------------------------------ 工具方法
 
     /** 授权码 + PKCE 完整登录；needNewPassword 不为空时处理首次登录改密。 */

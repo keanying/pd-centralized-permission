@@ -97,6 +97,25 @@ public class BootstrapRunner implements ApplicationRunner {
         for (PdsProperties.ClientDefinition c : props.getBootstrap().getClients()) {
             tx.executeWithoutResult(s -> ensureClient(c));
         }
+        if (props.getConsole().isEnabled()) {
+            tx.executeWithoutResult(s -> ensureConsoleClient());
+        }
+    }
+
+    /** 管理后台客户端（公共客户端 + PKCE）：不存在则创建，存在则按配置同步回调地址。 */
+    private void ensureConsoleClient() {
+        PdsProperties.Console c = props.getConsole();
+        String base = props.getIssuer().replaceAll("/+$", "") + c.getBasePath();
+        List<String> redirects = c.getRedirectUris().isEmpty() ? List.of(base + "/auth/callback") : c.getRedirectUris();
+        List<String> logouts = c.getPostLogoutRedirectUris().isEmpty() ? List.of(base + "/") : c.getPostLogoutRedirectUris();
+        if (clientService.exists(c.getClientId())) {
+            clientService.syncRedirectUris(c.getClientId(), redirects, logouts);
+            return;
+        }
+        clientService.create(new ClientService.Spec(c.getClientId(), null, "PDS 管理后台", PdsPermissions.APP,
+                List.of("authorization_code"), redirects, logouts, List.of("openid", "profile"), true,
+                java.time.Duration.ofMinutes(30), null, true));
+        log.info("已注册管理后台客户端 {}，回调地址 {}", c.getClientId(), redirects);
     }
 
     private void registerPdsManifest() {
@@ -237,7 +256,7 @@ public class BootstrapRunner implements ApplicationRunner {
         clientService.create(new ClientService.Spec(c.getClientId(), c.getClientSecret(),
                 StringUtils.hasText(c.getName()) ? c.getName() : c.getClientId(), app, c.getGrantTypes(),
                 c.getRedirectUris(), c.getPostLogoutRedirectUris(), c.getScopes(), c.isRequirePkce(),
-                c.getAccessTokenTtl(), c.getRefreshTokenTtl()));
+                c.getAccessTokenTtl(), c.getRefreshTokenTtl(), c.isPublicClient()));
         log.info("已注册客户端 {}（应用 {}）", c.getClientId(), app);
     }
 }

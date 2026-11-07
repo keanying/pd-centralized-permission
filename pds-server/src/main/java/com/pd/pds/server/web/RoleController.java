@@ -49,13 +49,19 @@ public class RoleController {
     }
 
     @GetMapping("/roles/{id}/bindings")
-    public R<List<RoleBinding>> bindings(@PathVariable String id) {
+    public R<List<RoleDtos.BindingView>> bindings(@PathVariable String id) {
         return R.ok(roles.bindings(id));
     }
 
     @PostMapping("/roles/{id}/bindings")
     public R<RoleBinding> bind(@PathVariable String id, @Valid @RequestBody RoleDtos.Bind req) {
         return R.ok(roles.bind(id, req));
+    }
+
+    @GetMapping("/role-bindings")
+    public R<List<RoleDtos.BindingView>> bindingsOfSubject(@org.springframework.web.bind.annotation.RequestParam String subjectType,
+                                                           @org.springframework.web.bind.annotation.RequestParam String subjectId) {
+        return R.ok(roles.bindingsOfSubject(subjectType, subjectId));
     }
 
     @DeleteMapping("/role-bindings/{bindingId}")

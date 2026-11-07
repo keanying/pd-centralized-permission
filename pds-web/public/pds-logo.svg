@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="PDS">
+  <!-- PDS 标志（按品牌稿绘制的矢量近似版，正式版本请替换为设计源文件） -->
+  <path d="M 57.6 22.1 A 34 34 0 1 0 79.5 59.9" fill="none" stroke="#FFFFFF" stroke-width="9" stroke-linecap="round"/>
+  <path d="M 53.6 10.7 A 44 44 0 0 1 88.5 42.6" fill="none" stroke="#22E59A" stroke-width="8" stroke-linecap="round"/>
+  <path d="M 58.5 32.5 A 24 24 0 0 1 67.5 41.5" fill="none" stroke="#22E59A" stroke-width="7" stroke-linecap="round"/>
+  <text x="45" y="68" text-anchor="middle" font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" font-size="36" fill="#22E59A">P</text>
+</svg>

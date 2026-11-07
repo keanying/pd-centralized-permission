@@ -96,7 +96,7 @@ public class UserController {
     }
 
     @GetMapping("/users/{id}/perms")
-    public R<List<UserPerm>> userPerms(@PathVariable String id) {
+    public R<List<RoleDtos.UserPermView>> userPerms(@PathVariable String id) {
         return R.ok(grants.listUserPerms(id));
     }
 

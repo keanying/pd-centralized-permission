@@ -32,6 +32,16 @@ public final class RoleDtos {
                        @NotBlank String subjectId, Boolean includeChildren, Instant validFrom, Instant validTo) {
     }
 
+    /** 角色绑定（subjectName 在按主体查询时为角色名称）。 */
+    public record BindingView(String id, String roleId, String subjectType, String subjectId, String subjectName,
+                              boolean includeChildren, Instant validFrom, Instant validTo, String createdBy, Instant createdAt) {
+    }
+
+    public record UserPermView(String id, String permCode, String permName, String resourceType, String resourceId,
+                               String resourceName, String action, String effect, String dataScope, String scopeValues,
+                               Instant validFrom, Instant validTo, String reason, String grantedBy, Instant createdAt) {
+    }
+
     public record RoleView(String id, String code, String name, String level, String scenicId, String description,
                            boolean builtin, List<RolePermission> permissions, long bindingCount) {
     }
