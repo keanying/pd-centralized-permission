@@ -1,24 +1,22 @@
 import type { Component } from 'vue'
-import {
-  IconHome, IconBranch, IconUser, IconUserGroup, IconShield, IconKey, IconLayers, IconAppCenter, IconHistory,
-} from '@kousum/semi-icons-vue'
+import { IconHome, IconGridView, IconUserSetting, IconLock, IconCheckList } from '@kousum/semi-icons-vue'
+import OrgChartIcon from '@/components/icons/OrgChartIcon.vue'
 
 export interface MenuItem {
   path: string
   title: string
-  short: string
   icon: Component
   perms: string[]
+  /** 子路径也视为选中 */
+  match?: string[]
 }
 
+/** 与设计稿侧栏一致：工作台、组织架构与人员、应用、人员明细权限、角色与授权、审计中心（设置在底部） */
 export const menus: MenuItem[] = [
-  { path: '/', title: '工作台', short: '工作台', icon: IconHome, perms: ['pds:console:access'] },
-  { path: '/orgs', title: '组织架构', short: '组织', icon: IconBranch, perms: ['pds:org:view'] },
-  { path: '/users', title: '人员管理', short: '人员', icon: IconUser, perms: ['pds:user:view'] },
-  { path: '/groups', title: '用户组', short: '用户组', icon: IconUserGroup, perms: ['pds:user:view'] },
-  { path: '/roles', title: '角色管理', short: '角色', icon: IconShield, perms: ['pds:role:view'] },
-  { path: '/user-grants', title: '人员明细权限', short: '明细权限', icon: IconKey, perms: ['pds:grant:manage', 'pds:authz:query'] },
-  { path: '/resources', title: '资源授权', short: '资源', icon: IconLayers, perms: ['pds:role:view'] },
-  { path: '/apps', title: '应用管理', short: '应用', icon: IconAppCenter, perms: ['pds:role:view'] },
-  { path: '/audit', title: '审计中心', short: '审计', icon: IconHistory, perms: ['pds:audit:view'] },
+  { path: '/', title: '工作台', icon: IconHome, perms: ['pds:console:access'] },
+  { path: '/orgs', title: '组织架构与人员', icon: OrgChartIcon, perms: ['pds:org:view', 'pds:user:view'] },
+  { path: '/apps', title: '应用管理', icon: IconGridView, perms: ['pds:role:view'] },
+  { path: '/user-grants', title: '人员明细权限', icon: IconUserSetting, perms: ['pds:grant:manage', 'pds:authz:query'] },
+  { path: '/roles', title: '角色与授权', icon: IconLock, perms: ['pds:role:view'], match: ['/resources'] },
+  { path: '/audit', title: '审计中心', icon: IconCheckList, perms: ['pds:audit:view'] },
 ]

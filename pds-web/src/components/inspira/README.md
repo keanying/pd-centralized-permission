@@ -5,8 +5,5 @@
 | 组件 | 用途 |
 |---|---|
 | NumberTicker | 工作台指标数字滚动 |
-| BorderBeam | 主视觉卡片流光边框 |
-| FlickeringGrid | 主视觉背景 |
-| CardSpotlight | 指标卡聚光效果 |
 
 升级方式：从 Inspira UI 仓库 `app/components/inspira/ui/<组件>/` 复制最新版本并替换 `cn` 的导入路径。

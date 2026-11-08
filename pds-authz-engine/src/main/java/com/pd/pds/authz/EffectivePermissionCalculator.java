@@ -40,8 +40,8 @@ public final class EffectivePermissionCalculator {
         UserProfile user = facts.user();
 
         Map<String, ResolvedScope> perms = new LinkedHashMap<>();
-        Map<String, List<String>> permAllow = new HashMap<>();
-        Map<String, List<String>> permDeny = new HashMap<>();
+        Map<String, List<SourceRef>> permAllow = new HashMap<>();
+        Map<String, List<SourceRef>> permDeny = new HashMap<>();
 
         // 1. 角色来源
         for (Facts.RoleBinding binding : facts.bindings()) {
@@ -52,7 +52,9 @@ public final class EffectivePermissionCalculator {
             if (role == null) {
                 continue;
             }
-            String source = "角色【" + role.name() + "】经 " + user.label(binding.subject()) + " 授予";
+            SourceRef source = new SourceRef(SourceRef.Kind.ROLE, role.name(), binding.subject().type(),
+                    user.nameOf(binding.subject()), binding.subject().includeChildren(), null, binding.validity().to(),
+                    "角色【" + role.name() + "】经 " + user.label(binding.subject()) + " 授予");
             for (Facts.RolePermission rp : role.permissions()) {
                 grantPerm(perms, permAllow, rp.permCode(), rp.scope(), source, user);
             }
@@ -65,9 +67,11 @@ public final class EffectivePermissionCalculator {
             }
             String reason = up.reason() == null || up.reason().isBlank() ? "" : "（原因：" + up.reason() + "）";
             if (up.effect() == Effect.ALLOW) {
-                grantPerm(perms, permAllow, up.permCode(), up.scope(), "人员明细直接授予" + reason, user);
+                grantPerm(perms, permAllow, up.permCode(), up.scope(), direct(SourceRef.Kind.DIRECT_ALLOW, up, user,
+                        "人员明细直接授予" + reason), user);
             } else {
-                permDeny.computeIfAbsent(up.permCode(), k -> new ArrayList<>()).add("人员明细禁止" + reason);
+                permDeny.computeIfAbsent(up.permCode(), k -> new ArrayList<>())
+                        .add(direct(SourceRef.Kind.DIRECT_DENY, up, user, "人员明细禁止" + reason));
             }
         }
 
@@ -75,14 +79,15 @@ public final class EffectivePermissionCalculator {
         permDeny.keySet().forEach(perms::remove);
         for (String disabled : facts.disabledPermCodes()) {
             if (perms.remove(disabled) != null) {
-                permDeny.computeIfAbsent(disabled, k -> new ArrayList<>()).add("权限点已停用");
+                permDeny.computeIfAbsent(disabled, k -> new ArrayList<>())
+                        .add(new SourceRef(SourceRef.Kind.DISABLED, null, null, null, false, null, null, "权限点已停用"));
             }
         }
 
         // 4. 资源实例
         Set<String> scenicScope = Collections.unmodifiableSet(new TreeSet<>(user.scenicScope()));
-        Map<String, List<String>> resAllow = new HashMap<>();
-        Map<String, List<String>> resDeny = new HashMap<>();
+        Map<String, List<SourceRef>> resAllow = new HashMap<>();
+        Map<String, List<SourceRef>> resDeny = new HashMap<>();
         Map<ResourceKey, EnumMap<ResourceAction, Boolean>> allowMap = new HashMap<>();
         Map<ResourceKey, EnumMap<ResourceAction, Boolean>> denyMap = new HashMap<>();
 
@@ -90,16 +95,19 @@ public final class EffectivePermissionCalculator {
             if (!g.validity().isActive(now) || !user.matches(g.subject())) {
                 continue;
             }
-            applyResource(g.resource(), g.action(), g.effect(), "资源授权给 " + user.label(g.subject()),
-                    allowMap, denyMap, resAllow, resDeny);
+            SourceRef ref = new SourceRef(g.effect() == Effect.ALLOW ? SourceRef.Kind.RESOURCE_ALLOW : SourceRef.Kind.RESOURCE_DENY,
+                    null, g.subject().type(), user.nameOf(g.subject()), g.subject().includeChildren(), null, g.validity().to(),
+                    "资源授权给 " + user.label(g.subject()));
+            applyResource(g.resource(), g.action(), g.effect(), ref, allowMap, denyMap, resAllow, resDeny);
         }
         for (Facts.UserPermission up : facts.userPermissions()) {
             if (up.resource() == null || up.action() == null || !up.validity().isActive(now)) {
                 continue;
             }
             String reason = up.reason() == null || up.reason().isBlank() ? "" : "（原因：" + up.reason() + "）";
-            String source = (up.effect() == Effect.ALLOW ? "人员明细直接授予" : "人员明细禁止") + reason;
-            applyResource(up.resource(), up.action(), up.effect(), source, allowMap, denyMap, resAllow, resDeny);
+            SourceRef ref = direct(up.effect() == Effect.ALLOW ? SourceRef.Kind.DIRECT_ALLOW : SourceRef.Kind.DIRECT_DENY, up, user,
+                    (up.effect() == Effect.ALLOW ? "人员明细直接授予" : "人员明细禁止") + reason);
+            applyResource(up.resource(), up.action(), up.effect(), ref, allowMap, denyMap, resAllow, resDeny);
         }
 
         Map<String, Map<ResourceAction, Set<String>>> resources = new LinkedHashMap<>();
@@ -143,8 +151,12 @@ public final class EffectivePermissionCalculator {
         return scenicId == null || Facts.GROUP_SCENIC.equals(scenicId) || scope.contains(scenicId);
     }
 
-    private static void grantPerm(Map<String, ResolvedScope> perms, Map<String, List<String>> sources,
-                                  String code, DataScope scope, String source, UserProfile user) {
+    private static SourceRef direct(SourceRef.Kind kind, Facts.UserPermission up, UserProfile user, String text) {
+        return new SourceRef(kind, null, SubjectType.USER, user.name(), false, up.reason(), up.validity().to(), text);
+    }
+
+    private static void grantPerm(Map<String, ResolvedScope> perms, Map<String, List<SourceRef>> sources,
+                                  String code, DataScope scope, SourceRef source, UserProfile user) {
         ResolvedScope resolved = perms.computeIfAbsent(code, k -> new ResolvedScope());
         if (scope != null) {
             resolve(resolved, scope, user);
@@ -169,24 +181,25 @@ public final class EffectivePermissionCalculator {
         }
     }
 
-    private static void applyResource(ResourceKey key, ResourceAction action, Effect effect, String source,
+    private static void applyResource(ResourceKey key, ResourceAction action, Effect effect, SourceRef source,
                                       Map<ResourceKey, EnumMap<ResourceAction, Boolean>> allowMap,
                                       Map<ResourceKey, EnumMap<ResourceAction, Boolean>> denyMap,
-                                      Map<String, List<String>> allowSources,
-                                      Map<String, List<String>> denySources) {
+                                      Map<String, List<SourceRef>> allowSources,
+                                      Map<String, List<SourceRef>> denySources) {
         boolean allow = effect == Effect.ALLOW;
         Set<ResourceAction> affected = allow ? action.grantedActions() : action.deniedActions();
         Map<ResourceKey, EnumMap<ResourceAction, Boolean>> target = allow ? allowMap : denyMap;
-        Map<String, List<String>> sources = allow ? allowSources : denySources;
-        String label = source + "（" + action.label() + "）";
+        Map<String, List<SourceRef>> sources = allow ? allowSources : denySources;
+        SourceRef label = new SourceRef(source.kind(), source.roleName(), source.subjectType(), source.subjectName(),
+                source.includeChildren(), source.reason(), source.validTo(), source.text() + "（" + action.label() + "）");
         for (ResourceAction a : affected) {
             target.computeIfAbsent(key, k -> new EnumMap<>(ResourceAction.class)).put(a, Boolean.TRUE);
             sources.computeIfAbsent(key + "#" + a.name(), k -> new ArrayList<>()).add(label);
         }
     }
 
-    private static Map<String, List<String>> freeze(Map<String, List<String>> map) {
-        Map<String, List<String>> copy = new HashMap<>();
+    private static Map<String, List<SourceRef>> freeze(Map<String, List<SourceRef>> map) {
+        Map<String, List<SourceRef>> copy = new HashMap<>();
         map.forEach((k, v) -> copy.put(k, List.copyOf(v)));
         return Collections.unmodifiableMap(copy);
     }

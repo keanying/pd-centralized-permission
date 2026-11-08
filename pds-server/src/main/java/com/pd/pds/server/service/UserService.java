@@ -51,10 +51,13 @@ public class UserService {
     private final TokenEpochService epochs;
     private final PasswordEncoder passwordEncoder;
     private final JdbcTemplate jdbc;
+    private final org.springframework.transaction.PlatformTransactionManager txManager;
 
     public UserService(SysUserMapper userMapper, UserOrgMapper userOrgMapper, OrgUnitMapper orgMapper,
                        PositionMapper positionMapper, OrgService orgService, Guard guard, AuthzService authz,
-                       AuditService audit, TokenEpochService epochs, PasswordEncoder passwordEncoder, JdbcTemplate jdbc) {
+                       AuditService audit, TokenEpochService epochs, PasswordEncoder passwordEncoder, JdbcTemplate jdbc,
+                       org.springframework.transaction.PlatformTransactionManager txManager) {
+        this.txManager = txManager;
         this.userMapper = userMapper;
         this.userOrgMapper = userOrgMapper;
         this.orgMapper = orgMapper;
@@ -325,6 +328,52 @@ public class UserService {
                 .eq(SysUser::getId, u.getId()));
         audit.record(AuditService.Entry.of("PASSWORD_CHANGE", "修改密码", "SUCCESS")
                 .actor(u.getId(), u.getName(), com.pd.pds.server.security.ActorResolver.clientIp()));
+    }
+
+    /**
+     * 批量导入：逐行独立创建（某行失败不影响其他行），组织与岗位按编码匹配，初始密码自动生成并逐行返回。
+     */
+    public List<UserDtos.ImportResult> importUsers(List<UserDtos.ImportRow> rows) {
+        guard.require(PdsPermissions.USER_MANAGE);
+        if (rows.size() > 1000) {
+            throw new BizException(ErrorCode.VALIDATION_FAILED, "单次最多导入 1000 人");
+        }
+        List<UserDtos.ImportResult> results = new ArrayList<>();
+        org.springframework.transaction.support.TransactionTemplate tx = new org.springframework.transaction.support.TransactionTemplate(txManager);
+        for (int i = 0; i < rows.size(); i++) {
+            UserDtos.ImportRow r = rows.get(i);
+            int rowNo = i + 1;
+            try {
+                if (!StringUtils.hasText(r.username()) || !StringUtils.hasText(r.name()) || !StringUtils.hasText(r.orgCode())) {
+                    throw new BizException(ErrorCode.VALIDATION_FAILED, "账号、姓名、组织编码为必填");
+                }
+                OrgUnit org = orgMapper.selectOne(new LambdaQueryWrapper<OrgUnit>().eq(OrgUnit::getCode, r.orgCode().trim()));
+                if (org == null) {
+                    throw BizException.notFound("组织编码【" + r.orgCode() + "】");
+                }
+                String positionId = null;
+                if (StringUtils.hasText(r.positionCode())) {
+                    Position p = positionMapper.selectOne(new LambdaQueryWrapper<Position>().eq(Position::getCode, r.positionCode().trim()));
+                    if (p == null) {
+                        throw BizException.notFound("岗位编码【" + r.positionCode() + "】");
+                    }
+                    positionId = p.getId();
+                }
+                String pid = positionId;
+                UserDtos.Credential c = tx.execute(s -> create(new UserDtos.CreateUser(r.username().trim(), trim(r.empNo()), r.name().trim(),
+                        trim(r.mobile()), trim(r.email()), trim(r.userType()), org.getId(), pid, null)));
+                results.add(new UserDtos.ImportResult(rowNo, true, "导入成功", c.userId(), c.username(), c.initialPassword()));
+            } catch (BizException e) {
+                results.add(new UserDtos.ImportResult(rowNo, false, e.getMessage(), null, r.username(), null));
+            } catch (RuntimeException e) {
+                results.add(new UserDtos.ImportResult(rowNo, false, "导入失败：" + e.getClass().getSimpleName(), null, r.username(), null));
+            }
+        }
+        return results;
+    }
+
+    private static String trim(String s) {
+        return StringUtils.hasText(s) ? s.trim() : null;
     }
 
     // ------------------------------------------------------------------ 内部

@@ -1,115 +1,148 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, resolveComponent } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Message } from 'view-ui-plus'
-import { IconAppCenter, IconPlus } from '@kousum/semi-icons-vue'
-import { api, type AppView, type ClientView, type PermPoint } from '@/api'
+import { IconGridView, IconPlus, IconClose } from '@kousum/semi-icons-vue'
+import { api, type AppView, type ClientView, type PermPoint, type ResourceType } from '@/api'
 import { useSession } from '@/stores/session'
 import { formatTime } from '@/lib/utils'
+import PdsModal from '@/components/pds/PdsModal.vue'
 import OneTimeSecret from '@/components/pds/OneTimeSecret.vue'
 
+const route = useRoute()
+const router = useRouter()
 const session = useSession()
 const canManage = computed(() => session.has('pds:app:manage'))
 const apps = ref<AppView[]>([])
-onMounted(async () => (apps.value = await api.apps()))
-
 const groups = computed(() => {
   const map = new Map<string, AppView[]>()
   apps.value.forEach((a) => map.set(a.categoryName, [...(map.get(a.categoryName) ?? []), a]))
   return [...map.entries()]
 })
 
-const drawer = reactive({ open: false, app: null as AppView | null, tab: 'perms', perms: [] as PermPoint[], clients: [] as ClientView[] })
+const cur = ref<AppView | null>(null)
+const tab = ref<'perms' | 'types' | 'clients'>('perms')
+const perms = ref<PermPoint[]>([])
+const types = ref<ResourceType[]>([])
+const clients = ref<ClientView[]>([])
 async function open(a: AppView) {
-  Object.assign(drawer, { open: true, app: a, tab: 'perms' })
-  drawer.perms = await api.appPermissions(a.code)
-  drawer.clients = canManage.value ? await api.appClients(a.code) : []
+  cur.value = a
+  tab.value = 'perms'
+  router.replace({ query: { app: a.code } })
+  const [p, t, c] = await Promise.all([api.appPermissions(a.code), api.resourceTypes(), canManage.value ? api.appClients(a.code) : Promise.resolve([])])
+  perms.value = p
+  types.value = t.filter((x) => x.appCode === a.code)
+  clients.value = c
 }
+function close() { cur.value = null; router.replace({ query: {} }) }
+onMounted(async () => {
+  apps.value = await api.apps()
+  const q = route.query.app as string
+  if (q) { const a = apps.value.find((x) => x.code === q); if (a) open(a) }
+})
+watch(() => route.query.app, (q) => { const a = apps.value.find((x) => x.code === q); if (a && a.code !== cur.value?.code) open(a) })
 
 const GRANTS: Record<string, string> = {
   authorization_code: '授权码（单点登录）', refresh_token: '刷新令牌', client_credentials: '客户端凭证（服务调用）',
-  'urn:ietf:params:oauth:grant-type:token-exchange': '令牌交换（代表用户调用）',
+  'urn:ietf:params:oauth:grant-type:token-exchange': '令牌交换（代表用户调用其他系统）',
 }
 const form = reactive({ open: false, clientId: '', name: '', grantTypes: ['authorization_code'] as string[], redirectUris: '', scopes: '', publicClient: false })
 const secret = reactive({ open: false, value: '' })
-async function createClient() {
-  if (!form.clientId || !form.name) return Message.warning('请填写客户端 ID 与名称')
+async function submitClient() {
+  if (!/^[a-z0-9-]{3,64}$/.test(form.clientId)) { Message.warning('客户端 ID 只能包含小写字母、数字和 -，长度 3-64'); return false }
+  if (!form.name.trim()) { Message.warning('请填写名称'); return false }
   const split = (s: string) => s.split(/[\s,，]+/).map((x) => x.trim()).filter(Boolean)
-  const r = await api.createClient(drawer.app!.code, {
-    clientId: form.clientId, name: form.name, grantTypes: form.publicClient ? ['authorization_code'] : form.grantTypes,
-    redirectUris: split(form.redirectUris), scopes: split(form.scopes), publicClient: form.publicClient,
-  })
-  form.open = false
-  drawer.clients = await api.appClients(drawer.app!.code)
+  const grants = form.publicClient ? ['authorization_code'] : form.grantTypes
+  if (grants.includes('authorization_code') && !split(form.redirectUris).length) { Message.warning('授权码方式必须填写回调地址'); return false }
+  const r = await api.createClient(cur.value!.code, { clientId: form.clientId, name: form.name.trim(), grantTypes: grants,
+    redirectUris: split(form.redirectUris), scopes: split(form.scopes), publicClient: form.publicClient })
+  clients.value = await api.appClients(cur.value!.code)
   if (r.clientSecret) Object.assign(secret, { open: true, value: r.clientSecret })
-  else Message.success('已创建公共客户端（无密钥）')
+  else Message.success('已创建公共客户端（无密钥，强制 PKCE）')
 }
 </script>
 
 <template>
-  <div class="flex flex-col gap-5">
-    <div v-for="[cat, list] in groups" :key="cat" class="pds-card">
-      <div class="pds-card-title">{{ cat }} <span class="pds-muted">{{ list.length }} 个应用</span></div>
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <div v-for="a in list" :key="a.code" class="cursor-pointer rounded-2xl border border-line p-5 transition-shadow hover:shadow-md" @click="open(a)">
-          <div class="flex items-start justify-between">
-            <div class="flex items-center gap-3">
-              <span class="flex size-11 items-center justify-center rounded-xl bg-brand text-white"><IconAppCenter /></span>
-              <div>
-                <div class="font-semibold text-ink">{{ a.name }}</div>
+  <div class="grid grid-cols-1 gap-5" :class="cur ? 'xl:grid-cols-[1fr_520px]' : ''">
+    <div class="flex min-w-0 flex-col gap-5">
+      <div v-for="[cat, list] in groups" :key="cat" class="pds-card">
+        <div class="pds-card-title">{{ cat }} <span class="pds-muted font-normal">{{ list.length }} 个应用</span></div>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2" :class="cur ? '' : '2xl:grid-cols-3'">
+          <div v-for="a in list" :key="a.code" class="cursor-pointer rounded-2xl p-5 transition-colors"
+               :class="cur?.code === a.code ? 'bg-accent-soft ring-2 ring-accent' : 'bg-row hover:bg-[#ECF1E8]'" @click="open(a)">
+            <div class="flex items-start gap-3">
+              <span class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-ink text-accent"><IconGridView /></span>
+              <div class="min-w-0 flex-1">
+                <div class="truncate font-semibold text-ink">{{ a.name }}</div>
                 <div class="pds-mono pds-muted">{{ a.code }}</div>
               </div>
+              <span class="pds-badge" :class="a.accessControl ? 'ok' : 'none'">{{ a.accessControl ? '准入控制' : '未开启准入' }}</span>
             </div>
-            <Tag :color="a.accessControl ? 'success' : 'default'">{{ a.accessControl ? '准入控制' : '未开启准入' }}</Tag>
-          </div>
-          <p class="pds-muted my-3 min-h-[18px]">{{ a.description || '—' }}</p>
-          <div class="flex gap-5 text-sm">
-            <span><b class="text-ink">{{ a.permissionCount }}</b> <span class="pds-muted">权限点</span></span>
-            <span><b class="text-ink">{{ a.resourceTypeCount }}</b> <span class="pds-muted">资源类型</span></span>
-            <span><b class="text-ink">{{ a.clientCount }}</b> <span class="pds-muted">客户端</span></span>
+            <p class="pds-muted my-3 min-h-[18px]">{{ a.description || '—' }}</p>
+            <div class="flex gap-5 text-[13px]">
+              <span><b class="text-ink">{{ a.permissionCount }}</b> <span class="text-muted">权限点</span></span>
+              <span><b class="text-ink">{{ a.resourceTypeCount }}</b> <span class="text-muted">资源类型</span></span>
+              <span><b class="text-ink">{{ a.clientCount }}</b> <span class="text-muted">客户端</span></span>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <Drawer v-model="drawer.open" :title="drawer.app?.name" width="820">
-      <p class="pds-muted mb-3">
-        清单版本 {{ drawer.app?.manifestVersion || '—' }} · 应用准入权限 <span class="pds-mono">{{ drawer.app?.code === 'pds' ? 'pds:console:access' : drawer.app?.code + ':access' }}</span>
-        · 接入方式见《应用接入指南》
-      </p>
-      <Tabs v-model="drawer.tab">
-        <TabPane :label="`权限点（${drawer.perms.length}）`" name="perms">
-          <Table size="small" :data="drawer.perms" :columns="[
-            { title: '权限点', key: 'name', minWidth: 180, render: (h: any, p: any) => h('div', [h('div', p.row.name), h('div', { class: 'pds-mono pds-muted' }, p.row.code)]) },
-            { title: '类型', key: 'type', width: 100 },
-            { title: '风险', key: 'risk', width: 70, render: (h: any, p: any) => h(resolveComponent('Tag'), { color: p.row.risk === 'HIGH' ? 'error' : 'default' }, () => (p.row.risk === 'HIGH' ? '高' : '低')) },
-            { title: '状态', key: 'status', width: 80, render: (h: any, p: any) => h('span', p.row.status === 1 ? '启用' : '已停用') },
-          ]" />
-        </TabPane>
-        <TabPane v-if="canManage" :label="`客户端（${drawer.clients.length}）`" name="clients">
-          <div class="pds-toolbar"><span class="grow" /><Button type="primary" @click="Object.assign(form, { open: true, clientId: '', name: '', redirectUris: '', scopes: '' })"><IconPlus size="small" /> 新建客户端</Button></div>
-          <Table size="small" :data="drawer.clients" no-data-text="暂无客户端" :columns="[
-            { title: '客户端', key: 'clientId', minWidth: 150, render: (h: any, p: any) => h('div', [h('div', p.row.name), h('div', { class: 'pds-mono pds-muted' }, p.row.clientId)]) },
-            { title: '授权方式', key: 'grantTypes', minWidth: 180, render: (h: any, p: any) => h('div', { class: 'text-xs' }, p.row.grantTypes.map((g: string) => h('div', GRANTS[g] || g))) },
-            { title: '范围', key: 'scopes', minWidth: 140, render: (h: any, p: any) => h('span', { class: 'pds-mono' }, p.row.scopes.join(' ')) },
-            { title: '类型', key: 'publicClient', width: 90, render: (h: any, p: any) => h('span', p.row.publicClient ? '公共' : '机密') },
-            { title: '创建', key: 'issuedAt', width: 140, render: (h: any, p: any) => h('span', formatTime(p.row.issuedAt)) },
-          ]" />
-        </TabPane>
-      </Tabs>
-    </Drawer>
+    <div v-if="cur" class="pds-card self-start border-0 border-l-4 border-solid border-accent">
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="text-[17px] font-semibold text-ink">{{ cur.name }}</div>
+          <div class="pds-muted mt-1">清单版本 {{ cur.manifestVersion || '—' }} · 应用准入 <span class="pds-mono">{{ cur.code === 'pds' ? 'pds:console:access' : cur.code + ':access' }}</span></div>
+        </div>
+        <button class="pds-link gray" @click="close"><IconClose /></button>
+      </div>
+      <RadioGroup v-model="tab" type="button" size="small" class="mt-4">
+        <Radio label="perms">权限点 {{ perms.length }}</Radio><Radio label="types">资源类型 {{ types.length }}</Radio>
+        <Radio v-if="canManage" label="clients">客户端 {{ clients.length }}</Radio>
+      </RadioGroup>
+      <div class="mt-4 max-h-[560px] overflow-auto">
+        <template v-if="tab === 'perms'">
+          <div v-for="p in perms" :key="p.code" class="flex items-center gap-3 border-0 border-b border-solid border-[#F0F2EE] py-2.5">
+            <div class="min-w-0 flex-1"><div class="text-[14px] text-ink">{{ p.name }}</div><div class="pds-mono pds-muted">{{ p.code }}</div></div>
+            <span class="pds-badge gray">{{ p.type }}</span>
+            <span v-if="p.risk === 'HIGH'" class="pds-badge bad">高风险</span>
+            <span v-if="p.status === 0" class="pds-badge none">已停用</span>
+          </div>
+          <p v-if="!perms.length" class="pds-muted py-6 text-center">尚未注册权限清单</p>
+        </template>
+        <template v-else-if="tab === 'types'">
+          <div v-for="t in types" :key="t.typeCode" class="flex items-center justify-between rounded-xl bg-row px-4 py-3 mb-2">
+            <span class="text-ink">{{ t.name }} <span class="pds-mono pds-muted">{{ t.typeCode }}</span></span>
+            <button class="pds-link" @click="router.push({ path: '/roles', query: { tab: 'resources' } })">去授权</button>
+          </div>
+          <p v-if="!types.length" class="pds-muted py-6 text-center">该应用未声明可授权的资源类型</p>
+        </template>
+        <template v-else>
+          <button class="pds-btn dark sm mb-3" @click="Object.assign(form, { open: true, clientId: '', name: '', redirectUris: '', scopes: '', publicClient: false, grantTypes: ['authorization_code'] })"><IconPlus size="small" /> 新建客户端</button>
+          <div v-for="c in clients" :key="c.clientId" class="mb-2 rounded-xl bg-row px-4 py-3">
+            <div class="flex items-center justify-between"><b class="text-ink">{{ c.name }}</b><span class="pds-badge" :class="c.publicClient ? 'warn' : 'gray'">{{ c.publicClient ? '公共客户端' : '机密客户端' }}</span></div>
+            <div class="pds-mono pds-muted mt-1">{{ c.clientId }} · {{ formatTime(c.issuedAt) }}</div>
+            <div class="mt-2 text-[12px] text-[#374151]">{{ c.grantTypes.map((g) => GRANTS[g] || g).join('、') }}</div>
+            <div class="pds-mono pds-muted mt-1">范围：{{ c.scopes.join(' ') }}</div>
+          </div>
+          <p v-if="!clients.length" class="pds-muted py-6 text-center">暂无客户端</p>
+        </template>
+      </div>
+    </div>
 
-    <Modal v-model="form.open" :title="`为 ${drawer.app?.name} 新建客户端`" width="560" @on-ok="createClient">
-      <Form :label-width="90">
-        <FormItem label="客户端 ID"><Input v-model="form.clientId" placeholder="小写字母、数字和 -，如 pbi-portal" /></FormItem>
-        <FormItem label="名称"><Input v-model="form.name" /></FormItem>
-        <FormItem label="浏览器应用"><Switch v-model="form.publicClient" /> <span class="pds-muted">单页应用使用公共客户端（无密钥，强制 PKCE）</span></FormItem>
+    <PdsModal v-model="form.open" :title="`为 ${cur?.name} 新建客户端`" width="580" ok-text="创建" :on-ok="submitClient">
+      <Form :label-width="96">
+        <FormItem label="客户端 ID" required><Input v-model="form.clientId" placeholder="如 pbi-portal" /></FormItem>
+        <FormItem label="名称" required><Input v-model="form.name" /></FormItem>
+        <FormItem label="浏览器应用"><Switch v-model="form.publicClient" /> <span class="pds-muted ml-2">单页应用用公共客户端（无密钥，强制 PKCE）</span></FormItem>
         <FormItem v-if="!form.publicClient" label="授权方式">
-          <CheckboxGroup v-model="form.grantTypes"><Checkbox v-for="(l, k) in GRANTS" :key="k" :label="k">{{ l }}</Checkbox></CheckboxGroup>
+          <CheckboxGroup v-model="form.grantTypes" class="flex flex-col"><Checkbox v-for="(l, k) in GRANTS" :key="k" :label="k">{{ l }}</Checkbox></CheckboxGroup>
         </FormItem>
-        <FormItem label="回调地址"><Input v-model="form.redirectUris" type="textarea" :rows="2" placeholder="授权码方式必填，多个用换行分隔；本地开发用 127.0.0.1" /></FormItem>
+        <FormItem label="回调地址"><Input v-model="form.redirectUris" type="textarea" :rows="2" placeholder="授权码方式必填，多个换行；本地开发用 127.0.0.1" /></FormItem>
         <FormItem label="范围"><Input v-model="form.scopes" placeholder="如 openid profile，或 pds.authz pds.audit" /></FormItem>
       </Form>
-    </Modal>
+    </PdsModal>
     <OneTimeSecret v-model="secret.open" title="客户端已创建" label="客户端密钥" :value="secret.value" />
   </div>
 </template>

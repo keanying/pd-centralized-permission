@@ -13,13 +13,13 @@ async function copy(v?: string) {
 </script>
 
 <template>
-  <Modal v-model="open" :title="title" :mask-closable="false" footer-hide>
-    <Alert type="warning" show-icon>{{ tip || '请立即复制并安全地交给使用者，关闭后将无法再次查看。' }}</Alert>
-    <div class="mt-3 text-sm text-muted">{{ label }}</div>
+  <Modal v-model="open" :title="title" :mask-closable="false" :closable="false">
+    <div class="rounded-xl bg-warn-soft-2 px-4 py-3 text-[13px] text-[#92400E]">{{ tip || '请立即复制并安全地交给使用者，关闭后将无法再次查看。' }}</div>
+    <div class="mt-4 text-[13px] text-muted">{{ label }}</div>
     <div class="mt-1 flex items-center gap-2">
       <Input :model-value="value" readonly class="pds-mono" />
-      <Button type="primary" @click="copy(value)">复制</Button>
+      <button class="pds-btn dark sm" @click="copy(value)">复制</button>
     </div>
-    <div class="mt-5 text-right"><Button @click="open = false">我已妥善保存</Button></div>
+    <template #footer><div class="flex justify-end"><button class="pds-btn accent sm" @click="open = false">我已妥善保存</button></div></template>
   </Modal>
 </template>

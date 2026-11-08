@@ -55,6 +55,11 @@ public class UserController {
         return R.ok(users.create(req));
     }
 
+    @PostMapping("/users/import")
+    public R<List<UserDtos.ImportResult>> importUsers(@Valid @RequestBody UserDtos.ImportRequest req) {
+        return R.ok(users.importUsers(req.rows()));
+    }
+
     @PutMapping("/users/{id}")
     public R<UserDtos.UserView> update(@PathVariable String id, @RequestBody UserDtos.UpdateUser req) {
         return R.ok(users.update(id, req));
@@ -103,6 +108,12 @@ public class UserController {
     @PostMapping("/users/{id}/perms")
     public R<UserPerm> addUserPerm(@PathVariable String id, @Valid @RequestBody RoleDtos.UserPermRequest req) {
         return R.ok(grants.addUserPerm(id, req));
+    }
+
+    @PutMapping("/users/{id}/perms/{permId}")
+    public R<Void> updateUserPerm(@PathVariable String id, @PathVariable String permId, @RequestBody RoleDtos.UpdateUserPerm req) {
+        grants.updateUserPerm(id, permId, req);
+        return R.ok();
     }
 
     @DeleteMapping("/users/{id}/perms/{permId}")

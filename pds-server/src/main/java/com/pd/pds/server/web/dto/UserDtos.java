@@ -42,6 +42,17 @@ public final class UserDtos {
                            List<String> positions, Instant lastLoginAt, boolean locked) {
     }
 
+    /** 批量导入的一行：组织、岗位按编码匹配。 */
+    public record ImportRow(String username, String empNo, String name, String mobile, String email, String userType,
+                            String orgCode, String positionCode) {
+    }
+
+    public record ImportRequest(@NotEmpty List<ImportRow> rows) {
+    }
+
+    public record ImportResult(int row, boolean ok, String message, String userId, String username, String initialPassword) {
+    }
+
     public record Me(String id, String username, String name, String scenicId, String primaryOrgId,
                      boolean mustChangePassword, List<String> pdsPermissions) {
     }

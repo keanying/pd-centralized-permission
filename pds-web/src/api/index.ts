@@ -34,9 +34,22 @@ export interface GrantView {
   id: string; subjectType: string; subjectId: string; subjectName: string; includeChildren: boolean; action: string; effect: string
   validFrom?: string; validTo?: string; reason?: string; grantedByName: string; createdAt: string
 }
-export interface PermissionState { code: string; name: string; type: string; risk: string; state: 'GRANTED' | 'DENIED' | 'NONE'; allowSources: string[]; denySources: string[]; dataScope?: any }
-export interface ResourceState { type: string; refId: string; name: string; scenicId: string; actions: string[]; reason: string }
-export interface UserEffective { userId: string; name: string; app: string; scenicScope: string[]; maxSecurityLevel: number; permissions: PermissionState[]; resources: ResourceState[]; version: number }
+export interface SourceRef {
+  kind: 'ROLE' | 'DIRECT_ALLOW' | 'DIRECT_DENY' | 'RESOURCE_ALLOW' | 'RESOURCE_DENY' | 'DISABLED'
+  roleName?: string; subjectType?: string; subjectName?: string; includeChildren: boolean; reason?: string; validTo?: string; text: string
+}
+export interface PermissionState {
+  code: string; name: string; type: string; risk: string; state: 'GRANTED' | 'DENIED' | 'NONE'; allowSources: string[]; denySources: string[]
+  dataScope?: any; allowRefs: SourceRef[]; denyRefs: SourceRef[]
+}
+export interface ResourceState {
+  type: string; refId: string; name: string; scenicId: string; actions: string[]; reason: string; denied: boolean; validTo?: string
+  allowRefs: SourceRef[]; denyRefs: SourceRef[]
+}
+export interface UserEffective {
+  userId: string; name: string; app: string; scenicScope: string[]; maxSecurityLevel: number; permissions: PermissionState[]
+  resources: ResourceState[]; version: number; status: string
+}
 export interface UserPermView {
   id: string; permCode?: string; permName?: string; resourceType?: string; resourceId?: string; resourceName?: string; action?: string
   effect: string; dataScope?: string; validFrom?: string; validTo?: string; reason: string; grantedBy: string; createdAt: string
@@ -46,10 +59,14 @@ export interface AuditEvent {
   scenicId?: string; ip?: string; targetType?: string; targetIds?: string; action?: string; result: string; detail?: string; hash: string; prevHash: string
 }
 export interface Overview {
-  users: number; activeUsers: number; lockedUsers: number; mustChangePassword: number; scenics: number; orgs: number; apps: number; roles: number
-  todayLogins: number; todayLoginFailures: number; todayDenied: number; todayTokenExchanges: number
-  loginTrend: { date: string; success: number; failure: number }[]
-  appsByCategory: { category: string; name: string; count: number }[]
+  onlineUsers: number; activeUsers: number; todayLogins: number; loginSparkline: number[]
+  apps: number; healthy: boolean; healthText: string
+  todayDenied: number; deniedChangePercent: number | null
+  pendingApprovals: number | null; expiringGrants: number
+  scenics: { id: string; name: string; users: number }[]
+  loginWeek: { thisWeek: number[]; lastWeek: number[]; todayIndex: number }
+  security: { activeUsers: number; activatedUsers: number; longInactive: number; locked: number; mustChangePassword: number }
+  aiUsage: { scenicId: string; name: string; chats: number; retrievals: number; sensitive: number }[]
   recentAlerts: AuditEvent[]
 }
 
@@ -66,6 +83,7 @@ export const api = {
 
   users: (params: object) => get<PageResult<UserView>>('/users', params),
   user: (id: string) => get<UserView>(`/users/${id}`),
+  importUsers: (rows: object[]) => post<{ row: number; ok: boolean; message: string; userId?: string; username: string; initialPassword?: string }[]>('/users/import', { rows }),
   createUser: (body: object) => post<Credential>('/users', body),
   updateUser: (id: string, body: object) => put(`/users/${id}`, body),
   assignOrgs: (id: string, assignments: object[]) => put(`/users/${id}/orgs`, { assignments }),
@@ -101,12 +119,14 @@ export const api = {
   userPerms: (id: string) => get<UserPermView[]>(`/users/${id}/perms`),
   addUserPerm: (id: string, body: object) => post(`/users/${id}/perms`, body),
   deleteUserPerm: (id: string, permId: string) => del(`/users/${id}/perms/${permId}`),
+  updateUserPerm: (id: string, permId: string, body: object) => put(`/users/${id}/perms/${permId}`, body),
   setScenicScope: (id: string, scenicIds: string[]) => put(`/users/${id}/scenic-scope`, { scenicIds }),
   setSecurityLevel: (body: object) => put('/security-levels', body),
   explain: (params: object) => get<{ allowed: boolean; reason: string }>('/authz/explain', params),
 
   audit: (params: object) => get<PageResult<AuditEvent>>('/audit/events', params),
   auditVerify: () => get<{ intact: boolean; checked: number; message: string }>('/audit/verify'),
+  auditVerifyOne: (id: string) => get<{ intact: boolean; message: string }>(`/audit/events/${id}/verify`),
 
   changePassword: (oldPassword: string, newPassword: string) => post('/me/password', { oldPassword, newPassword }),
 }

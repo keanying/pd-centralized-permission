@@ -104,11 +104,15 @@ public class AuditService {
         }
     }
 
-    public PageResult<AuditEvent> query(String userId, String eventType, String app, String result,
+    /** eventType 支持逗号分隔的多个类型。 */
+    public PageResult<AuditEvent> query(String userId, String eventType, String app, String result, String scenicId,
                                         Instant from, Instant to, long page, long size) {
+        List<String> types = StringUtils.hasText(eventType)
+                ? java.util.Arrays.stream(eventType.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList() : List.of();
         LambdaQueryWrapper<AuditEvent> w = new LambdaQueryWrapper<AuditEvent>()
                 .eq(StringUtils.hasText(userId), AuditEvent::getUserId, userId)
-                .eq(StringUtils.hasText(eventType), AuditEvent::getEventType, eventType)
+                .in(!types.isEmpty(), AuditEvent::getEventType, types)
+                .eq(StringUtils.hasText(scenicId), AuditEvent::getScenicId, scenicId)
                 .eq(StringUtils.hasText(app), AuditEvent::getApp, app)
                 .eq(StringUtils.hasText(result), AuditEvent::getResult, result)
                 .ge(from != null, AuditEvent::getTs, from)
@@ -119,6 +123,23 @@ public class AuditService {
     }
 
     public record VerifyResult(boolean intact, long checked, Long firstBrokenSeq, String message) {
+    }
+
+    /** 单条校验：本条哈希可重算，且与前一条哈希相连。 */
+    public VerifyResult verifyOne(String id) {
+        AuditEvent ev = mapper.selectOne(new LambdaQueryWrapper<AuditEvent>().eq(AuditEvent::getId, id));
+        if (ev == null) {
+            throw com.pd.pds.common.BizException.notFound("审计记录");
+        }
+        if (!hashOf(ev).equals(ev.getHash())) {
+            return new VerifyResult(false, 1, ev.getSeq(), "本条记录内容与哈希不符，可能被篡改");
+        }
+        String expectedPrev = ev.getSeq() == 1 ? GENESIS : java.util.Optional.ofNullable(mapper.selectById(ev.getSeq() - 1))
+                .map(AuditEvent::getHash).orElse(null);
+        if (!ev.getPrevHash().equals(expectedPrev)) {
+            return new VerifyResult(false, 1, ev.getSeq(), "与前一条记录的哈希链断开");
+        }
+        return new VerifyResult(true, 1, null, "哈希链未被篡改");
     }
 
     /** 逐条重算哈希链，发现第一处不一致即返回。 */

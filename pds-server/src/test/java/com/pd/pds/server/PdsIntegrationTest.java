@@ -358,8 +358,35 @@ class PdsIntegrationTest {
         String token = JsonPath.read(r.getResponse().getContentAsString(), "$.access_token");
 
         String overview = api(get("/api/v1/dashboard/overview"), token).getContentAsString();
-        assertThat((Integer) JsonPath.read(overview, "$.data.users")).isGreaterThanOrEqualTo(2);
-        assertThat((List<?>) JsonPath.read(overview, "$.data.loginTrend")).hasSize(7);
+        assertThat((Integer) JsonPath.read(overview, "$.data.activeUsers")).isGreaterThanOrEqualTo(1);
+        assertThat((List<?>) JsonPath.read(overview, "$.data.loginWeek.thisWeek")).hasSize(7);
+        assertThat((Integer) JsonPath.read(overview, "$.data.onlineUsers")).isGreaterThanOrEqualTo(1);
+        assertThat((Object) JsonPath.read(overview, "$.data.pendingApprovals")).isNull();
+        assertThat((List<String>) JsonPath.read(overview, "$.data.scenics[*].name")).contains("景区A");
+
+        // 批量导入：一行成功、一行组织编码错误
+        String imported = api(post("/api/v1/users/import"), token, """
+                {"rows":[{"username":"wangwu","name":"王五","orgCode":"S_A_TICKET","positionCode":"SELLER"},
+                         {"username":"zhaoliu","name":"赵六","orgCode":"NOT_EXIST"}]}""").getContentAsString();
+        assertThat((List<Boolean>) JsonPath.read(imported, "$.data[*].ok")).containsExactly(true, false);
+        assertThat((String) JsonPath.read(imported, "$.data[1].message")).contains("NOT_EXIST");
+        assertThat(((String) JsonPath.read(imported, "$.data[0].initialPassword")).length()).isEqualTo(12);
+
+        // 人员明细：结构化来源与设置有效期（张三在前面的用例中被停用，先恢复）
+        api(post("/api/v1/users/" + zhangsanId + "/enable"), token);
+        String eff = api(get("/api/v1/users/" + zhangsanId + "/effective?app=pdk"), token).getContentAsString();
+        assertThat((List<String>) JsonPath.read(eff, "$.data.resources[?(@.refId=='kb_finance')].denyRefs[0].kind")).containsExactly("DIRECT_DENY");
+        String perms = api(get("/api/v1/users/" + zhangsanId + "/perms"), token).getContentAsString();
+        String permId = JsonPath.read(perms, "$.data[0].id");
+        api(put("/api/v1/users/" + zhangsanId + "/perms/" + permId), token, "{\"validTo\":\"2099-12-31T00:00:00Z\"}");
+        perms = api(get("/api/v1/users/" + zhangsanId + "/perms"), token).getContentAsString();
+        assertThat((String) JsonPath.read(perms, "$.data[0].validTo")).startsWith("2099-12-31");
+
+        // 审计：单条完整性校验
+        String events = api(get("/api/v1/audit/events?eventType=LOGIN,ADMIN_CHANGE&pageSize=1"), token).getContentAsString();
+        String eventId = ((List<String>) JsonPath.read(events, "$.data.items[*].id")).get(0);
+        String one = api(get("/api/v1/audit/events/" + eventId + "/verify"), token).getContentAsString();
+        assertThat((Boolean) JsonPath.read(one, "$.data.intact")).isTrue();
 
         String apps = api(get("/api/v1/apps"), token).getContentAsString();
         assertThat((List<String>) JsonPath.read(apps, "$.data[*].code")).contains("pds", "pdk", "pda");

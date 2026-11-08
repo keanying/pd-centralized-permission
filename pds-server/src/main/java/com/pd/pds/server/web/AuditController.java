@@ -47,12 +47,19 @@ public class AuditController {
                                             @RequestParam(required = false) String eventType,
                                             @RequestParam(required = false) String app,
                                             @RequestParam(required = false) String result,
+                                            @RequestParam(required = false) String scenicId,
                                             @RequestParam(required = false) Instant from,
                                             @RequestParam(required = false) Instant to,
                                             @RequestParam(defaultValue = "1") long page,
                                             @RequestParam(defaultValue = "20") long pageSize) {
         guard.require(PdsPermissions.AUDIT_VIEW);
-        return R.ok(audit.query(userId, eventType, app, result, from, to, page, Math.min(pageSize, 100)));
+        return R.ok(audit.query(userId, eventType, app, result, scenicId, from, to, page, Math.min(pageSize, 100)));
+    }
+
+    @GetMapping("/events/{id}/verify")
+    public R<AuditService.VerifyResult> verifyOne(@org.springframework.web.bind.annotation.PathVariable String id) {
+        guard.require(PdsPermissions.AUDIT_VIEW);
+        return R.ok(audit.verifyOne(id));
     }
 
     @GetMapping("/verify")

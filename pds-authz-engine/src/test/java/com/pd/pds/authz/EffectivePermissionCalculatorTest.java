@@ -211,6 +211,35 @@ class EffectivePermissionCalculatorTest {
     }
 
     @Test
+    void 结构化来源_类型_对象_有效期() {
+        Instant until = NOW.plus(Duration.ofDays(30));
+        List<Facts.UserPermission> ups = List.of(
+                new Facts.UserPermission("9", "pdk:update:submit", null, null, Effect.ALLOW, null, new Validity(null, until), "联络人"),
+                new Facts.UserPermission("10", "pda:chat:use", null, null, Effect.DENY, null, Validity.ALWAYS, "停用问答"));
+        EffectivePermissions eff = calculator.compute(bundle(baseBindings(), ups, baseGrants(), List.of()), NOW);
+
+        SourceRef role = eff.explain("pda:tool:pdk_search").allowRefs().get(0);
+        assertThat(role.kind()).isEqualTo(SourceRef.Kind.ROLE);
+        assertThat(role.roleName()).isEqualTo("PDA普通用户");
+        assertThat(role.subjectType()).isEqualTo(com.pd.pds.authz.model.SubjectType.POSITION);
+        assertThat(role.subjectName()).isEqualTo("售票员");
+
+        SourceRef direct = eff.explain("pdk:update:submit").allowRefs().get(0);
+        assertThat(direct.kind()).isEqualTo(SourceRef.Kind.DIRECT_ALLOW);
+        assertThat(direct.validTo()).isEqualTo(until);
+        assertThat(direct.reason()).isEqualTo("联络人");
+
+        Decision denied = eff.explain("pda:chat:use");
+        assertThat(denied.denyRefs()).extracting(SourceRef::kind).containsExactly(SourceRef.Kind.DIRECT_DENY);
+        assertThat(denied.allowRefs()).extracting(SourceRef::kind).containsExactly(SourceRef.Kind.ROLE);
+
+        SourceRef res = eff.explain(kb("ticket"), ResourceAction.READ).allowRefs().get(0);
+        assertThat(res.kind()).isEqualTo(SourceRef.Kind.RESOURCE_ALLOW);
+        assertThat(res.subjectName()).isEqualTo("景区A");
+        assertThat(res.includeChildren()).isTrue();
+    }
+
+    @Test
     void 按应用过滤快照() {
         EffectivePermissions eff = calculator.compute(bundle(baseBindings(), List.of(), baseGrants(), List.of()), NOW);
         EffectivePermissions pda = eff.forApp("pda");

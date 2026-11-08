@@ -100,7 +100,8 @@ public class GrantService {
             String state = d.allowed() ? "GRANTED" : (d.denySources().isEmpty() ? "NONE" : "DENIED");
             ResolvedScope scope = eff.scopeOf(p.getCode());
             perms.add(new RoleDtos.PermissionState(p.getCode(), p.getName(), p.getType(), p.getRisk(), state,
-                    d.allowSources(), d.denySources(), scope == null || scope.isEmpty() ? null : scope));
+                    d.allowSources(), d.denySources(), scope == null || scope.isEmpty() ? null : scope,
+                    d.allowRefs(), d.denyRefs()));
         }
 
         List<RoleDtos.ResourceState> resources = new ArrayList<>();
@@ -129,11 +130,22 @@ public class GrantService {
                     }
                 }
                 Decision d = eff.explain(key, ResourceAction.READ);
-                resources.add(new RoleDtos.ResourceState(type, refId, r.getName(), r.getScenicId(), actions, d.reason()));
+                // 可访问的最晚失效时间：任一允许来源为长期则为长期
+                Instant validTo = null;
+                boolean forever = d.allowRefs().isEmpty();
+                for (com.pd.pds.authz.SourceRef ref : d.allowRefs()) {
+                    if (ref.validTo() == null) {
+                        forever = true;
+                    } else if (validTo == null || ref.validTo().isAfter(validTo)) {
+                        validTo = ref.validTo();
+                    }
+                }
+                resources.add(new RoleDtos.ResourceState(type, refId, r.getName(), r.getScenicId(), actions, d.reason(),
+                        !d.allowed(), forever ? null : validTo, d.allowRefs(), d.denyRefs()));
             }
         }
         return new RoleDtos.UserEffective(userId, user.getName(), app, eff.scenicScope(), eff.maxSecurityLevel(),
-                perms, resources, authz.version());
+                perms, resources, authz.version(), user.getStatus());
     }
 
     public List<RoleDtos.UserPermView> listUserPerms(String userId) {
@@ -214,6 +226,34 @@ public class GrantService {
         authz.bumpVersion();
         auditAdmin(allow ? "人员明细授予" : "人员明细禁止", userId, Map.of("target", target, "reason", req.reason()));
         return up;
+    }
+
+    /** 修改人员明细记录的有效期 / 原因（设置有效期）。 */
+    @Transactional
+    public void updateUserPerm(String userId, String permId, RoleDtos.UpdateUserPerm req) {
+        guard.require(PdsPermissions.GRANT_MANAGE);
+        assertManageable(authz.requireUser(userId), PdsPermissions.GRANT_MANAGE);
+        UserPerm up = userPermMapper.selectById(permId);
+        if (up == null || !up.getUserId().equals(userId)) {
+            throw BizException.notFound("人员明细权限");
+        }
+        com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<UserPerm> w =
+                new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<UserPerm>().eq(UserPerm::getId, permId);
+        if (Boolean.TRUE.equals(req.clearValidTo())) {
+            w.set(UserPerm::getValidTo, null);
+        } else if (req.validTo() != null) {
+            if (!req.validTo().isAfter(Instant.now())) {
+                throw new BizException(ErrorCode.VALIDATION_FAILED, "有效期必须晚于当前时间");
+            }
+            w.set(UserPerm::getValidTo, req.validTo());
+        }
+        if (StringUtils.hasText(req.reason())) {
+            w.set(UserPerm::getReason, req.reason());
+        }
+        userPermMapper.update(null, w);
+        authz.bumpVersion();
+        auditAdmin("修改人员明细有效期", userId, Map.of("permId", permId,
+                "validTo", Boolean.TRUE.equals(req.clearValidTo()) ? "长期" : String.valueOf(req.validTo())));
     }
 
     @Transactional

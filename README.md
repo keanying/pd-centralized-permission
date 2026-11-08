@@ -80,8 +80,8 @@ keytool -genkeypair -alias pds -keyalg RSA -keysize 2048 -validity 3650 -storety
 mvn test
 ```
 
-- `pds-authz-engine`：12 个引擎单元测试（禁止优先、组织继承、有效期、数据范围并集、资源动作层级、景区约束、密级、停用权限点、按应用过滤）
-- `pds-server`：13 个端到端集成测试（授权码 + PKCE 单点登录、管理后台公共客户端、首次登录强制改密、登录锁定、令牌交换、应用准入、权限清单、资源授权、人员明细禁止、鉴权开放接口、三员分立、停用即吊销、审计哈希链）
+- `pds-authz-engine`：13 个引擎单元测试（禁止优先、组织继承、有效期、数据范围并集、资源动作层级、景区约束、密级、停用权限点、按应用过滤、结构化授权来源）
+- `pds-server`：13 个端到端集成测试（授权码 + PKCE 单点登录、管理后台公共客户端、首次登录强制改密、登录锁定、令牌交换、应用准入、权限清单、资源授权、人员明细禁止、鉴权开放接口、三员分立、停用即吊销、审计哈希链、工作台统计、批量导入、个人授权有效期、单条审计校验）
 
 指定 PostgreSQL 运行集成测试：
 
@@ -95,21 +95,22 @@ mvn -pl pds-server test -Dspring.datasource.url=jdbc:postgresql://localhost:5432
 |---|---|
 | OIDC | `/.well-known/openid-configuration`、`/oauth2/authorize`、`/oauth2/token`（授权码/刷新/客户端凭证/令牌交换）、`/oauth2/jwks`、`/userinfo`、`/connect/logout`、`/oauth2/revoke` |
 | 组织架构 | `GET /api/v1/orgs/tree`、`POST/PUT/DELETE /api/v1/orgs`、`GET/POST /api/v1/positions` |
-| 人员 | `GET/POST /api/v1/users`、`PUT /api/v1/users/{id}`、`PUT /api/v1/users/{id}/orgs`、`POST /api/v1/users/{id}/disable|leave|enable|reset-password` |
+| 人员 | `GET/POST /api/v1/users`、`PUT /api/v1/users/{id}`、`PUT /api/v1/users/{id}/orgs`、`POST /api/v1/users/{id}/disable|leave|enable|reset-password`、`POST /api/v1/users/import`（批量导入，≤1000 行，逐行返回结果） |
 | 用户组 | `GET/POST /api/v1/groups`、`PUT /api/v1/groups/{id}/members` |
 | 应用 | `GET /api/v1/apps`、`POST /api/v1/apps/{app}/manifest`、`GET /api/v1/apps/{app}/permissions`、`POST /api/v1/apps/{app}/clients` |
 | 资源 | `POST /api/v1/resources`、`DELETE /api/v1/resources/{type}/{refId}`、`GET/POST/DELETE /api/v1/resources/{type}/{refId}/grants` |
 | 角色 | `GET/POST /api/v1/roles`、`PUT /api/v1/roles/{id}/permissions`、`GET/POST /api/v1/roles/{id}/bindings`、`DELETE /api/v1/role-bindings/{id}` |
-| 人员明细权限 | `GET /api/v1/users/{id}/effective?app=`、`GET/POST/DELETE /api/v1/users/{id}/perms`、`PUT /api/v1/users/{id}/scenic-scope`、`PUT /api/v1/security-levels` |
+| 人员明细权限 | `GET /api/v1/users/{id}/effective?app=`、`GET/POST/DELETE /api/v1/users/{id}/perms`、`PUT /api/v1/users/{id}/perms/{permId}`（修改有效期）、`PUT /api/v1/users/{id}/scenic-scope`、`PUT /api/v1/security-levels` |
 | 管理后台 | `GET /api/v1/dashboard/overview`、`GET /api/v1/resources`、`GET /api/v1/resource-types`、`GET /api/v1/apps/{app}/clients`、`GET /api/v1/role-bindings`、`GET /api/v1/groups/{id}/members`、`GET /console/config.js` |
 | 鉴权开放 | `POST /api/v1/authz/check`、`POST /api/v1/authz/batch-check`、`GET /api/v1/authz/snapshot`、`GET /api/v1/authz/explain`、`GET /api/v1/authz/resources/accessible` |
-| 审计 | `GET /api/v1/audit/events`、`GET /api/v1/audit/verify`、`POST /api/v1/audit/events`（应用上报） |
+| 审计 | `GET /api/v1/audit/events`（可按人员、事件类型、应用、结果、景区、时间筛选）、`GET /api/v1/audit/verify`（全链校验）、`GET /api/v1/audit/events/{id}/verify`（单条校验）、`POST /api/v1/audit/events`（应用上报） |
 | 个人中心 | `GET /api/v1/me`、`POST /api/v1/me/password` |
 
 统一响应：`{"code":0,"message":"成功","data":{...}}`；错误码见 `pds-common` 的 `ErrorCode`，提示信息均为中文。
 
 ## 品牌
 
-主色 `#1E50E6`（PDS 蓝），强调色 `#22E59A`（绿）。登录页标志 `pds-server/src/main/resources/static/assets/pds-logo.svg` 为按品牌稿绘制的矢量近似版，拿到设计源文件后直接替换同名文件即可。
+- 品牌标志：主色 `#1E50E6`（PDS 蓝），强调色 `#22E59A`（绿）。`pds-server/src/main/resources/static/assets/pds-logo.svg` 为按品牌稿绘制的矢量近似版，拿到设计源文件后直接替换同名文件即可。
+- 界面配色：管理后台与统一登录页严格按 UX Pilot 设计稿，深炭 `#1F2421` + 黄绿 `#A3D65C`，页面底色 `#E9EEE6`，警示红 `#EF4444`。
 
 相关仓库：[pd_knowledge_service](https://github.com/keanying/pd_knowledge_service)（PDK 知识服务）

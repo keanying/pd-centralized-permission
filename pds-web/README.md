@@ -11,9 +11,9 @@
 | 框架 | Vue 3 + TypeScript + Vite + Vue Router + Pinia |
 | 组件库 | [View UI Plus](https://www.iviewui.com/view-ui-plus)（iView 的 Vue 3 版本，API 与 iView 4 一致；iView 4 本身只支持 Vue 2）|
 | 图标 | [Semi Design 图标](https://semi.design/zh-CN/basic/icon) 的 Vue 3 版本 `@kousum/semi-icons-vue` |
-| 动效组件 | [Inspira UI](https://inspira-ui.com)：NumberTicker、BorderBeam、FlickeringGrid、CardSpotlight（源码复制于 `src/components/inspira/`，MIT） |
-| 样式 | Tailwind CSS 4（不启用 preflight）+ View UI Plus Less 主题（PDS 品牌色 `#1E50E6` / `#22E59A`） |
-| 图表 | ECharts（vue-echarts） |
+| 动效组件 | [Inspira UI](https://inspira-ui.com)：NumberTicker（工作台数字滚动，源码复制于 `src/components/inspira/`，MIT） |
+| 样式 | Tailwind CSS 4（不启用 preflight）+ View UI Plus Less 主题，配色严格按 UX Pilot 设计稿：深炭 `#1F2421` + 黄绿 `#A3D65C`，页面底色 `#E9EEE6`（色值集中在 `src/styles/main.css` 的 `@theme` 与 `src/styles/theme.less`） |
+| 图表 | 工作台图表按设计稿用 HTML/SVG 绘制（胶囊柱、环形图、分组柱），不引入图表库 |
 | 登录 | OIDC 授权码 + PKCE（公共客户端 `pds-console`，无密钥），令牌仅存于 sessionStorage |
 | 包管理 | **pnpm 10**（版本固定在 `package.json` 的 `packageManager`，锁文件 `pnpm-lock.yaml`）；Node.js 20+ |
 
@@ -21,7 +21,19 @@
 
 ## 页面
 
-工作台 · 组织架构 · 人员管理 · 用户组 · 角色管理 · 人员明细权限 · 资源授权 · 应用管理 · 审计中心 · 个人中心。菜单与路由按当前人员在 PDS 中的权限点（`pds:*`）显示。
+与 UX Pilot 设计稿一一对应，菜单按当前人员在 PDS 中的权限点（`pds:*`）显示：
+
+| 菜单 | 内容 |
+|---|---|
+| 工作台 | 在线人数、今日登录、接入应用、系统健康；越权拦截、待审批（二期）、即将到期授权；景区分布、登录趋势（本周/上周）、安全态势、AI 使用概况 |
+| 组织架构与人员 | 左侧组织树 / 用户组切换、岗位库；右侧人员表（筛选、批量导入、新增、编辑、停用/启用），筛选条件同步到地址栏 |
+| 应用管理 | 按架构分层展示接入系统；右侧详情：权限点、资源类型、客户端 |
+| 人员明细权限 | 权限树（按应用折叠、来源标签）、资源授权卡片、直接授予 / 禁止 / 设置有效期、权限解释 |
+| 角色与授权 | 角色权限编辑（未保存提醒）、角色绑定；资源实例授权 |
+| 审计中心 | AI 问答审计视图（问题摘要、调用工具、命中文档）与全部日志；单条记录完整性校验与全链校验 |
+| 个人设置 | 个人信息、我的权限、修改密码 |
+
+交互约定：弹窗提交失败时保持打开并保留已填内容；有未保存修改时切换角色、离开页面、关闭抽屉均会提示；停用、撤销、退出等操作需二次确认；顶部全局搜索支持 ↑ ↓ 回车 Esc；新建应用客户端的密钥只显示一次，须确认已保存才能关闭。
 
 ## 配置
 

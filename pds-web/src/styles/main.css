@@ -3,38 +3,102 @@
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 
+/* 设计稿配色（UX Pilot · PDS 统一权限）：深炭灰 + 黄绿 */
 @theme {
-  --color-brand: #1E50E6;
-  --color-brand-dark: #1438B0;
-  --color-brand-soft: #E8EEFD;
-  --color-accent: #22E59A;
-  --color-accent-dark: #0F9F69;
-  --color-ink: #0B1B4D;
-  --color-page: #F3F6FD;
-  --color-line: #E4E9F4;
+  --color-ink: #1F2421;          /* 侧栏、主视觉、主按钮、标题 */
+  --color-ink-2: #353A37;        /* 深色卡片内层 */
+  --color-accent: #A3D65C;       /* 强调：选中、高亮、进度 */
+  --color-accent-soft: #EEF7DC;  /* 浅绿底：已拥有、AI 问答徽标 */
+  --color-accent-text: #4A7A22;  /* 绿色文字：在职、详情链接 */
+  --color-page: #E9EEE6;         /* 页面底色 */
+  --color-row: #F3F6F0;          /* 表头、列表行底 */
+  --color-line: #E3EBDD;         /* 浅灰绿：低值柱、分隔 */
   --color-muted: #6B7280;
+  --color-danger: #EF4444;
+  --color-danger-2: #F87171;
+  --color-danger-soft: #FEF2F2;
+  --color-warn: #D97706;
+  --color-warn-soft: #FEF3C7;
+  --color-warn-soft-2: #FFFBEB;
 }
 
 html, body, #app { height: 100%; margin: 0; }
 body {
   background: var(--color-page);
-  color: #1F2937;
+  color: #1F2421;
   font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-/* 通用卡片 */
-.pds-card {
-  background: #fff;
-  border-radius: 20px;
-  box-shadow: 0 6px 24px rgba(11, 27, 77, .06);
-  padding: 20px 24px;
-}
-.pds-card-title {
-  font-size: 16px; font-weight: 600; color: var(--color-ink); margin: 0 0 16px;
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-}
+/* ---------- 通用组件（与设计稿一致） ---------- */
+.pds-card { background: #fff; border-radius: 20px; padding: 24px; }
+.pds-card-title { font-size: 15px; font-weight: 600; color: var(--color-ink); margin: 0 0 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .pds-muted { color: var(--color-muted); font-size: 12px; }
-.pds-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 16px; }
-.pds-toolbar .grow { flex: 1; }
 .pds-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+
+/* 徽标 */
+.pds-badge { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 12px; line-height: 20px; white-space: nowrap; }
+.pds-badge.ok { background: var(--color-accent-soft); color: var(--color-accent-text); }
+.pds-badge.none { background: #F3F4F6; color: #6B7280; }
+.pds-badge.bad { background: var(--color-danger-soft); color: var(--color-danger); }
+.pds-badge.bad-solid { background: var(--color-danger-2); color: #fff; }
+.pds-badge.warn { background: var(--color-warn-soft); color: #92400E; }
+.pds-badge.dark { background: var(--color-ink); color: #fff; }
+.pds-badge.gray { background: #F3F4F6; color: #374151; }
+.pds-badge.white { background: #fff; color: #374151; }
+
+/* 状态点 */
+.pds-dot { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.pds-dot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pds-dot.ok { color: var(--color-accent-text); }
+.pds-dot.off { color: #9CA3AF; }
+.pds-dot.bad { color: var(--color-danger); }
+
+/* 胶囊输入 / 胶囊下拉（筛选条） */
+.pds-pill { height: 40px; border-radius: 20px; background: var(--color-row); border: 0; display: inline-flex; align-items: center; gap: 6px; padding: 0 16px; font-size: 13px; color: #1F2421; cursor: pointer; white-space: nowrap; }
+.pds-pill:hover { background: #E8EEE3; }
+.pds-pill.white { background: #fff; }
+.pds-search { position: relative; display: inline-flex; align-items: center; }
+.pds-search > svg, .pds-search > span.semi-icon { position: absolute; left: 14px; color: #9CA3AF; pointer-events: none; }
+.pds-search input { height: 40px; border-radius: 20px; border: 0; background: var(--color-row); padding: 0 16px 0 38px; font-size: 13px; outline: none; width: 100%; color: #1F2421; }
+.pds-search.white input { background: #fff; }
+.pds-search input:focus { box-shadow: 0 0 0 2px var(--color-accent); }
+
+/* 按钮（设计稿：深色主按钮、白色描边按钮、红色危险按钮、黄绿强调按钮） */
+.pds-btn { height: 40px; padding: 0 18px; border-radius: 20px; border: 1px solid transparent; display: inline-flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; transition: opacity .15s, background .15s; white-space: nowrap; }
+.pds-btn:disabled { opacity: .45; cursor: not-allowed; }
+.pds-btn.dark { background: var(--color-ink); color: #fff; }
+.pds-btn.dark:hover:not(:disabled) { background: #2C322F; }
+.pds-btn.ghost { background: #fff; color: #1F2421; border-color: #E5E7EB; }
+.pds-btn.ghost:hover:not(:disabled) { background: var(--color-row); }
+.pds-btn.danger { background: var(--color-danger-soft); color: var(--color-danger); }
+.pds-btn.danger:hover:not(:disabled) { background: #FDE2E2; }
+.pds-btn.accent { background: var(--color-accent); color: #1F2421; }
+.pds-btn.accent:hover:not(:disabled) { background: #96CB4E; }
+.pds-btn.sm { height: 32px; padding: 0 14px; font-size: 13px; border-radius: 16px; }
+
+/* 文字链接按钮 */
+.pds-link { background: none; border: 0; padding: 0; cursor: pointer; font-size: 13px; color: var(--color-accent-text); }
+.pds-link:hover { text-decoration: underline; }
+.pds-link.gray { color: #6B7280; }
+.pds-link.red { color: var(--color-danger-2); }
+.pds-link:disabled { color: #C0C4CC; cursor: not-allowed; text-decoration: none; }
+
+/* 设计稿风格的数据表（表头浅灰绿圆角、行分隔线） */
+.pds-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; }
+.pds-table thead th { background: var(--color-row); color: #4B5563; font-weight: 600; font-size: 12px; text-align: left; padding: 14px 12px; }
+.pds-table thead th:first-child { border-radius: 14px 0 0 14px; }
+.pds-table thead th:last-child { border-radius: 0 14px 14px 0; }
+.pds-table tbody td { padding: 16px 12px; border-bottom: 1px solid #F0F2EE; color: #374151; vertical-align: middle; }
+.pds-table tbody tr { transition: background .12s; }
+.pds-table tbody tr.clickable { cursor: pointer; }
+.pds-table tbody tr:hover td { background: #FAFBF8; }
+.pds-table tbody tr.active td { background: #F6FAEF; }
+.pds-table .empty { text-align: center; color: #9CA3AF; padding: 40px 0; }
+
+/* 分页（设计稿：圆形页码，当前页黄绿） */
+.pds-pager { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; }
+.pds-pager .pages { display: flex; gap: 8px; }
+.pds-pager button { width: 32px; height: 32px; border-radius: 50%; border: 0; background: var(--color-row); color: #374151; cursor: pointer; font-size: 12px; }
+.pds-pager button.active { background: var(--color-accent); color: #1F2421; font-weight: 600; }
+.pds-pager button:disabled { opacity: .4; cursor: not-allowed; }

@@ -47,6 +47,11 @@ public record UserProfile(
         };
     }
 
+    /** 授权对象的显示名称（无名称时为 ID）。 */
+    public String nameOf(SubjectRef subject) {
+        return subjectNames.getOrDefault(subject.key(), subject.id());
+    }
+
     public String label(SubjectRef subject) {
         String name = subjectNames.getOrDefault(subject.key(), subject.id());
         String suffix = subject.type() == SubjectType.ORG && subject.includeChildren() ? "（含下级）" : "";

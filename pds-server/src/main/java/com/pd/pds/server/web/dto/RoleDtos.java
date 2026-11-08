@@ -65,14 +65,23 @@ public final class RoleDtos {
 
     /** 人员明细权限页：某应用下每个权限点的状态与来源。 */
     public record PermissionState(String code, String name, String type, String risk, String state,
-                                  List<String> allowSources, List<String> denySources, Object dataScope) {
+                                  List<String> allowSources, List<String> denySources, Object dataScope,
+                                  List<com.pd.pds.authz.SourceRef> allowRefs, List<com.pd.pds.authz.SourceRef> denyRefs) {
     }
 
+    /**
+     * 资源授权卡片。denied=true 表示被禁止；validTo 为可访问的最晚失效时间（null 为长期）。
+     */
     public record ResourceState(String type, String refId, String name, String scenicId, List<String> actions,
-                                String reason) {
+                                String reason, boolean denied, Instant validTo,
+                                List<com.pd.pds.authz.SourceRef> allowRefs, List<com.pd.pds.authz.SourceRef> denyRefs) {
+    }
+
+    public record UpdateUserPerm(Instant validTo, Boolean clearValidTo, String reason) {
     }
 
     public record UserEffective(String userId, String name, String app, Set<String> scenicScope, int maxSecurityLevel,
-                                List<PermissionState> permissions, List<ResourceState> resources, long version) {
+                                List<PermissionState> permissions, List<ResourceState> resources, long version,
+                                String status) {
     }
 }

@@ -21,21 +21,21 @@ public final class EffectivePermissions {
     private final String userId;
     private final Instant computedAt;
     private final Map<String, ResolvedScope> permissions;
-    private final Map<String, List<String>> permAllowSources;
-    private final Map<String, List<String>> permDenySources;
+    private final Map<String, List<SourceRef>> permAllowSources;
+    private final Map<String, List<SourceRef>> permDenySources;
     private final Map<String, Map<ResourceAction, Set<String>>> resources;
-    private final Map<String, List<String>> resourceAllowSources;
-    private final Map<String, List<String>> resourceDenySources;
+    private final Map<String, List<SourceRef>> resourceAllowSources;
+    private final Map<String, List<SourceRef>> resourceDenySources;
     private final Set<String> scenicScope;
     private final int maxSecurityLevel;
 
     EffectivePermissions(String userId, Instant computedAt,
                          Map<String, ResolvedScope> permissions,
-                         Map<String, List<String>> permAllowSources,
-                         Map<String, List<String>> permDenySources,
+                         Map<String, List<SourceRef>> permAllowSources,
+                         Map<String, List<SourceRef>> permDenySources,
                          Map<String, Map<ResourceAction, Set<String>>> resources,
-                         Map<String, List<String>> resourceAllowSources,
-                         Map<String, List<String>> resourceDenySources,
+                         Map<String, List<SourceRef>> resourceAllowSources,
+                         Map<String, List<SourceRef>> resourceDenySources,
                          Set<String> scenicScope,
                          int maxSecurityLevel) {
         this.userId = userId;
@@ -104,21 +104,21 @@ public final class EffectivePermissions {
     }
 
     public Decision explain(String permCode) {
-        return new Decision(has(permCode),
+        return Decision.of(has(permCode),
                 permAllowSources.getOrDefault(permCode, List.of()),
                 permDenySources.getOrDefault(permCode, List.of()));
     }
 
     public Decision explain(ResourceKey key, ResourceAction action) {
         String k = key + "#" + action.name();
-        List<String> denies = resourceDenySources.getOrDefault(k, List.of());
+        List<SourceRef> denies = resourceDenySources.getOrDefault(k, List.of());
         boolean allowed = canAccess(key, action);
-        List<String> extra = (!allowed && denies.isEmpty() && resourceAllowSources.containsKey(k))
-                ? List.of("资源不在您的景区范围内或未在 PDS 注册") : List.of();
-        if (!extra.isEmpty()) {
-            return new Decision(false, resourceAllowSources.get(k), extra);
+        if (!allowed && denies.isEmpty() && resourceAllowSources.containsKey(k)) {
+            SourceRef outOfScope = new SourceRef(SourceRef.Kind.RESOURCE_DENY, null, null, null, false, null, null,
+                    "资源不在您的景区范围内或未在 PDS 注册");
+            return Decision.of(false, resourceAllowSources.get(k), List.of(outOfScope));
         }
-        return new Decision(allowed, resourceAllowSources.getOrDefault(k, List.of()), denies);
+        return Decision.of(allowed, resourceAllowSources.getOrDefault(k, List.of()), denies);
     }
 
     /** 只保留某应用的权限点与资源类型（编码以 "{app}:" 开头）。 */

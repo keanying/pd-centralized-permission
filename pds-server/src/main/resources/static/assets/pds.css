@@ -1,13 +1,13 @@
-/* PDS 品牌色：主色 #1E50E6（蓝），强调色 #22E59A（绿），深色 #0B1B4D */
+/* 与管理后台设计稿一致：深炭灰 #1F2421 + 黄绿 #A3D65C，页面底色 #E9EEE6 */
 :root {
-  --pds-blue: #1E50E6;
-  --pds-blue-dark: #1438B0;
-  --pds-green: #22E59A;
-  --pds-ink: #0B1B4D;
-  --pds-text: #1F2937;
+  --pds-blue: #1F2421;
+  --pds-blue-dark: #2C322F;
+  --pds-green: #A3D65C;
+  --pds-ink: #1F2421;
+  --pds-text: #1F2421;
   --pds-muted: #6B7280;
-  --pds-bg: #F3F6FD;
-  --pds-danger: #E5484D;
+  --pds-bg: #E9EEE6;
+  --pds-danger: #EF4444;
 }
 * { box-sizing: border-box; }
 body {
@@ -17,39 +17,39 @@ body {
 }
 .card {
   display: flex; width: min(960px, 94vw); min-height: 560px; background: #fff;
-  border-radius: 24px; overflow: hidden; box-shadow: 0 24px 64px rgba(11, 27, 77, .12);
+  border-radius: 28px; overflow: hidden; box-shadow: 0 24px 64px rgba(31, 36, 33, .10);
 }
 .brand {
   flex: 1.1; padding: 48px; color: #fff; position: relative; overflow: hidden;
-  background: radial-gradient(circle at 85% 15%, rgba(34, 229, 154, .25), transparent 40%),
-              linear-gradient(150deg, var(--pds-blue) 0%, var(--pds-blue-dark) 100%);
+  background: radial-gradient(circle at 85% 15%, rgba(163, 214, 92, .22), transparent 42%), #1F2421;
   display: flex; flex-direction: column; justify-content: space-between;
 }
 .brand .logo { display: flex; align-items: center; gap: 14px; font-size: 30px; font-weight: 800; letter-spacing: 1px; }
-.brand .logo img { width: 64px; height: 64px; }
+.brand .logo .mark { width: 52px; height: 52px; border-radius: 50%; background: var(--pds-green); color: var(--pds-ink);
+  display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800; }
 .brand h1 { font-size: 30px; margin: 0 0 12px; font-weight: 700; }
-.brand p { margin: 0; opacity: .85; line-height: 1.8; }
+.brand p { margin: 0; opacity: .7; line-height: 1.8; }
 .brand .tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
-.brand .tags span { padding: 4px 12px; border-radius: 999px; background: rgba(255, 255, 255, .14); font-size: 13px; }
+.brand .tags span { padding: 4px 12px; border-radius: 999px; background: #353A37; color: var(--pds-green); font-size: 13px; }
 .brand .foot { font-size: 12px; opacity: .7; }
 .form { flex: 1; padding: 56px 48px; display: flex; flex-direction: column; justify-content: center; }
 .form h2 { margin: 0 0 6px; font-size: 24px; color: var(--pds-ink); }
 .form .sub { margin: 0 0 28px; color: var(--pds-muted); font-size: 14px; }
 label { display: block; font-size: 14px; color: var(--pds-ink); margin: 16px 0 8px; }
 input[type=text], input[type=password] {
-  width: 100%; height: 46px; padding: 0 14px; border: 1px solid #D6DCEA; border-radius: 12px;
+  width: 100%; height: 46px; padding: 0 18px; border: 0; background: #F3F6F0; border-radius: 23px;
   font-size: 15px; outline: none; transition: border-color .15s, box-shadow .15s;
 }
-input:focus { border-color: var(--pds-blue); box-shadow: 0 0 0 3px rgba(30, 80, 230, .15); }
+input:focus { box-shadow: 0 0 0 2px var(--pds-green); }
 button {
-  margin-top: 28px; width: 100%; height: 48px; border: 0; border-radius: 12px; cursor: pointer;
+  margin-top: 28px; width: 100%; height: 48px; border: 0; border-radius: 24px; cursor: pointer;
   background: var(--pds-blue); color: #fff; font-size: 16px; font-weight: 600; letter-spacing: 2px;
 }
 button:hover { background: var(--pds-blue-dark); }
-.alert { padding: 10px 14px; border-radius: 10px; font-size: 14px; margin-bottom: 8px; }
-.alert.error { background: #FDECEC; color: var(--pds-danger); }
-.alert.info { background: #E9FBF3; color: #0F7A52; }
+.alert { padding: 10px 16px; border-radius: 16px; font-size: 14px; margin-bottom: 8px; }
+.alert.error { background: #FEF2F2; color: var(--pds-danger); }
+.alert.info { background: #EEF7DC; color: #4A7A22; }
 .hint { color: var(--pds-muted); font-size: 12px; margin-top: 8px; line-height: 1.6; }
 .links { margin-top: 24px; font-size: 13px; color: var(--pds-muted); }
-.links a { color: var(--pds-blue); text-decoration: none; }
+.links a { color: #4A7A22; text-decoration: none; }
 @media (max-width: 720px) { .brand { display: none; } }
