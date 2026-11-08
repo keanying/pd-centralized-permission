@@ -175,6 +175,10 @@ async function explainSelected() {
     <!-- 人员信息与操作 -->
     <div class="pds-card flex flex-wrap items-center gap-6 py-5">
       <span class="flex size-12 items-center justify-center rounded-full bg-accent-soft text-[15px] font-semibold text-ink">{{ user?.name.slice(-2) }}</span>
+      <div class="min-w-[160px]">
+        <div class="text-[18px] font-bold text-ink">{{ user?.name }}</div>
+        <div class="mt-0.5 text-[12px] text-muted">工号 {{ user?.empNo || '—' }} · {{ user?.primaryOrgName || '—' }} · {{ user?.positions.join('、') || '无岗位' }}</div>
+      </div>
       <div class="flex gap-8 text-[12px]">
         <div><div class="mb-1 text-muted">景区范围</div><span class="pds-badge ok">{{ scenicNames }}</span></div>
         <div><div class="mb-1 text-muted">最高密级</div><span class="pds-badge warn">{{ SECURITY_LEVELS[anyEff?.maxSecurityLevel ?? 0] }}</span></div>

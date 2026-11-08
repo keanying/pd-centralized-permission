@@ -9,6 +9,7 @@ import AlertBell from './AlertBell.vue'
 import { useSession } from '@/stores/session'
 import { usePage } from '@/stores/page'
 import { logout } from '@/auth/oidc'
+import { config } from '@/config'
 
 const route = useRoute()
 const router = useRouter()
@@ -42,6 +43,9 @@ function go(path: string) { flyout.value = null; router.push(path) }
 
 // 切换页面（路径变化）时重置为路由默认标题与副标题；仅查询参数变化不重置。页面可通过 usePage().set() 覆盖
 watch(() => route.path, () => page.set((route.meta.title as string) || '', { subtitle: (route.meta.subtitle as string) || '' }), { immediate: true })
+
+// 浏览器标签页标题：页面名 - 系统标题
+watch(() => page.title, (t) => { document.title = t ? `${t} - ${config.title}` : config.title }, { immediate: true })
 
 // 头像文字：人名（≤3 字）取后两字，其他名称取首字
 const initial = computed(() => {
@@ -107,17 +111,10 @@ function confirmLogout() {
     </transition>
 
     <main class="flex min-w-0 flex-1 flex-col">
-      <header class="mb-5 flex min-h-[48px] items-start justify-between gap-6">
-        <div class="min-w-0">
-          <h1 class="m-0 truncate text-[24px] font-bold leading-tight text-ink">
-            {{ page.title }}<span v-if="page.inline" class="ml-2 text-[14px] font-normal text-muted">{{ page.inline }}</span>
-          </h1>
-          <div v-if="page.subtitle" class="mt-1 text-[14px] text-muted">{{ page.subtitle }}</div>
-        </div>
-        <div class="flex shrink-0 items-center gap-3">
-          <GlobalSearch />
-          <AlertBell />
-        </div>
+      <!-- 不显示页面标题（与侧栏菜单重复），只保留全局搜索与告警；页面名称显示在浏览器标签页 -->
+      <header class="mb-5 flex min-h-[44px] items-center justify-end gap-3">
+        <GlobalSearch />
+        <AlertBell />
       </header>
       <section class="flex-1 pb-2">
         <router-view />
