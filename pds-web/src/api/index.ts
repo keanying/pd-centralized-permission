@@ -29,6 +29,7 @@ export interface PermPoint { code: string; appCode: string; name: string; type: 
 export interface AppView {
   code: string; name: string; description?: string; category?: string; categoryName: string; accessControl: boolean
   manifestVersion?: string; permissionCount: number; resourceTypeCount: number; clientCount: number
+  homeUrl?: string
 }
 export interface ClientView { clientId: string; name: string; app: string; grantTypes: string[]; redirectUris: string[]; scopes: string[]; publicClient: boolean; issuedAt: string }
 export interface ResourceType { typeCode: string; appCode: string; name: string; actions: string }

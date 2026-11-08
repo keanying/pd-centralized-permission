@@ -25,19 +25,19 @@ const CATEGORIES: Record<string, string> = {
   REALTIME_GOVERNANCE: '实时治理', DATA_CLEANSING: '数据清洗', DATA_INTEGRATION: '数据集成', FOUNDATION: '公共底座', FEEDBACK: '回流平台',
 }
 // 新增 / 编辑应用
-const appForm = reactive({ open: false, mode: 'create' as 'create' | 'edit', code: '', name: '', category: 'APPLICATION', description: '', accessControl: true })
-function openCreate() { Object.assign(appForm, { open: true, mode: 'create', code: '', name: '', category: 'APPLICATION', description: '', accessControl: true }) }
+const appForm = reactive({ open: false, mode: 'create' as 'create' | 'edit', code: '', name: '', category: 'APPLICATION', description: '', accessControl: true, homeUrl: '' })
+function openCreate() { Object.assign(appForm, { open: true, mode: 'create', code: '', name: '', category: 'APPLICATION', description: '', accessControl: true, homeUrl: '' }) }
 function openEdit(a: AppView) {
-  Object.assign(appForm, { open: true, mode: 'edit', code: a.code, name: a.name, category: a.category || '', description: a.description || '', accessControl: a.accessControl })
+  Object.assign(appForm, { open: true, mode: 'edit', code: a.code, name: a.name, category: a.category || '', description: a.description || '', accessControl: a.accessControl, homeUrl: a.homeUrl || '' })
 }
 async function submitApp() {
   if (appForm.mode === 'create' && !/^[a-z][a-z0-9_]{1,31}$/.test(appForm.code)) { Message.warning('应用编码只能为小写字母开头的字母数字组合'); return false }
   if (!appForm.name.trim()) { Message.warning('请填写应用名称'); return false }
   if (appForm.mode === 'create') {
-    await api.createApp({ code: appForm.code, name: appForm.name.trim(), category: appForm.category || undefined, description: appForm.description || undefined, accessControl: appForm.accessControl })
+    await api.createApp({ code: appForm.code, name: appForm.name.trim(), category: appForm.category || undefined, description: appForm.description || undefined, accessControl: appForm.accessControl, homeUrl: appForm.homeUrl.trim() || undefined })
     Message.success(`已新增应用，自动生成准入节点 ${appForm.code}:access，可到权限树维护节点`)
   } else {
-    await api.updateApp(appForm.code, { name: appForm.name.trim(), category: appForm.category, description: appForm.description, accessControl: appForm.accessControl })
+    await api.updateApp(appForm.code, { name: appForm.name.trim(), category: appForm.category, description: appForm.description, accessControl: appForm.accessControl, homeUrl: appForm.homeUrl.trim() })
     Message.success('已保存')
   }
   await loadApps()
@@ -199,6 +199,7 @@ async function submitClient() {
         <div><div class="pds-label">所属分层</div>
           <Select v-model="appForm.category" clearable transfer placeholder="未分类"><Option v-for="(l, k) in CATEGORIES" :key="k" :value="k">{{ l }}</Option></Select></div>
         <div><div class="pds-label">说明</div><Input v-model="appForm.description" /></div>
+        <div><div class="pds-label">访问地址（门户中的应用入口跳转到这里）</div><Input v-model="appForm.homeUrl" placeholder="如 https 开头的系统首页地址" /></div>
         <label class="flex items-center gap-2 text-[13px]"><Switch v-model="appForm.accessControl" size="small" :disabled="appForm.code === 'pds'" /> 应用准入：人员须获得"登录进入"权限才能单点登录该应用</label>
       </div>
     </PdsModal>

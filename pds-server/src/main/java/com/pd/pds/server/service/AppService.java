@@ -31,6 +31,7 @@ import com.pd.pds.server.security.CurrentActor;
 import com.pd.pds.server.security.Guard;
 import com.pd.pds.server.security.PdsPermissions;
 import com.pd.pds.server.web.dto.AppDtos;
+import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -107,7 +108,7 @@ public class AppService {
                         a.getCategory() == null ? "未分类" : AppCategories.ALL.getOrDefault(a.getCategory(), a.getCategory()),
                         Boolean.TRUE.equals(a.getAccessControl()), a.getManifestVersion(),
                         perms.getOrDefault(a.getCode(), 0L), types.getOrDefault(a.getCode(), 0L),
-                        clientCounts.getOrDefault(a.getCode(), 0L)))
+                        clientCounts.getOrDefault(a.getCode(), 0L), a.getHomeUrl()))
                 .toList();
     }
 
@@ -304,6 +305,11 @@ public class AppService {
         }
         AppDtos.ManifestResult r = applyManifest(req.code(), new AppDtos.Manifest(req.name(), req.description(), "manual",
                 List.of(), List.of(), req.category(), req.accessControl()));
+        if (StringUtils.hasText(req.homeUrl())) {
+            AppInfo info = appMapper.selectById(req.code());
+            info.setHomeUrl(req.homeUrl().trim());
+            appMapper.updateById(info);
+        }
         CurrentActor a = guard.actor();
         audit.record(AuditService.Entry.of("ADMIN_CHANGE", "新增应用", "SUCCESS")
                 .actor(a.auditId(), a.userName(), a.ip()).target("app", req.code()).detail(Map.of("name", req.name())));

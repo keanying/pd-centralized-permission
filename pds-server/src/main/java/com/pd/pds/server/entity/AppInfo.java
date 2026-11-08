@@ -19,6 +19,8 @@ public class AppInfo {
     private String category;
     /** 是否开启应用准入：开启后人员须拥有 {app}:access 才能单点登录进入该应用。 */
     private Boolean accessControl;
+    /** 访问地址（门户中的应用入口跳转到这里，由应用自行发起单点登录）。 */
+    private String homeUrl;
     private String manifestVersion;
     private Integer status;
     private Instant createdAt;

@@ -84,6 +84,7 @@ public final class PermTreeDtos {
     }
 
     public record CreateApp(@NotBlank @Pattern(regexp = "[a-z][a-z0-9_]{1,31}", message = "应用编码只能为小写字母开头的字母数字组合") String code,
-                            @NotBlank String name, String category, String description, Boolean accessControl) {
+                            @NotBlank String name, String category, String description, Boolean accessControl,
+                            @Pattern(regexp = "^$|^(https?://|/).{0,500}$", message = "访问地址须以 http://、https:// 或 / 开头") String homeUrl) {
     }
 }

@@ -118,6 +118,7 @@ public class AppAdminService {
         AppInfo a = require(code);
         if (StringUtils.hasText(req.name())) a.setName(req.name().trim());
         if (req.description() != null) a.setDescription(req.description());
+        if (req.homeUrl() != null) a.setHomeUrl(req.homeUrl().isBlank() ? null : req.homeUrl().trim());
         if (req.category() != null) {
             if (!req.category().isBlank() && !AppCategories.ALL.containsKey(req.category())) {
                 throw new BizException(ErrorCode.VALIDATION_FAILED, "未知的应用分类：" + req.category());

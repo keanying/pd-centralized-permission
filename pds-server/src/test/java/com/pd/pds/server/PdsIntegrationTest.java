@@ -257,6 +257,10 @@ class PdsIntegrationTest {
         assertThat((List<String>) JsonPath.read(snap, "$.data.resources['pdk:kb'].read")).containsExactly("kb_common", "kb_ticket");
         assertThat((List<String>) JsonPath.read(snap, "$.data.dataScopes['pdk:kb:view'].scenicIds")).containsExactly(scenicA);
 
+        // 门户应用入口：本人可进入的应用（未开启准入或拥有“登录进入”权限），不含 PDS 管理后台
+        String myApps = api(get("/api/v1/me/apps"), zhangsanToken).getContentAsString();
+        assertThat((List<String>) JsonPath.read(myApps, "$.data[*].code")).contains("pda").doesNotContain("pds");
+
         // 资源负责人默认拥有该资源的管理权（如 PDK 中新建知识库的人）
         String pdkRes = clientToken("pdk-service", "pdk-service-secret", "pds.resource");
         api(post("/api/v1/resources"), pdkRes, "{\"type\":\"pdk:kb\",\"refId\":\"kb_owned\",\"name\":\"张三的库\",\"scenicId\":\""

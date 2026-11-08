@@ -64,7 +64,11 @@ public final class AppDtos {
 
     public record AppView(String code, String name, String description, String category, String categoryName,
                           boolean accessControl, String manifestVersion, long permissionCount, long resourceTypeCount,
-                          long clientCount) {
+                          long clientCount, String homeUrl) {
+    }
+
+    /** 当前人员可进入的应用（门户“业务应用入口”）。 */
+    public record MyApp(String code, String name, String description, String category, String categoryName, String homeUrl) {
     }
 
     public record ResourceView(String id, String type, String refId, String name, String scenicId, String scenicName,
@@ -83,6 +87,7 @@ public final class AppDtos {
                                Instant validFrom, Instant validTo, String reason) {
     }
 
-    public record UpdateApp(String name, String category, String description, Boolean accessControl) {
+    public record UpdateApp(String name, String category, String description, Boolean accessControl,
+                            @Pattern(regexp = "^$|^(https?://|/).{0,500}$", message = "访问地址须以 http://、https:// 或 / 开头") String homeUrl) {
     }
 }
