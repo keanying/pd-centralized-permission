@@ -12,6 +12,11 @@
     <name>pds-server</name>
     <description>PDS 服务：OIDC 认证中心 + 管理 API + 鉴权开放 API + 审计</description>
 
+    <properties>
+        <!-- -Pweb 编译前端所用的 pnpm 可执行文件（Windows 由 web-windows 配置覆盖为 pnpm.cmd） -->
+        <pnpm.executable>pnpm</pnpm.executable>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>com.pd.pds</groupId>
@@ -132,7 +137,8 @@
     <profiles>
         <!--
           随 PDS 一起发布管理后台：mvn -Pweb package
-          编译 ../pds-web（需本机安装 Node.js 20+），产物输出到 target/classes/static/console，访问 {PDS}/console/。
+          用 pnpm 编译 ../pds-web（需本机安装 Node.js 20+ 与 pnpm 10+，可通过 corepack enable 启用），
+          产物输出到 target/classes/static/console，打包进 jar，访问 {PDS}/console/。
           不加 -Pweb 时 PDS 不包含前端，前端可单独部署（见 pds-web/README.md）。
         -->
         <profile>
@@ -148,9 +154,9 @@
                                 <phase>generate-resources</phase>
                                 <goals><goal>exec</goal></goals>
                                 <configuration>
-                                    <executable>npm</executable>
+                                    <executable>${pnpm.executable}</executable>
                                     <workingDirectory>${project.basedir}/../pds-web</workingDirectory>
-                                    <arguments><argument>ci</argument><argument>--no-audit</argument><argument>--no-fund</argument></arguments>
+                                    <arguments><argument>install</argument><argument>--frozen-lockfile</argument></arguments>
                                 </configuration>
                             </execution>
                             <execution>
@@ -158,7 +164,7 @@
                                 <phase>generate-resources</phase>
                                 <goals><goal>exec</goal></goals>
                                 <configuration>
-                                    <executable>npm</executable>
+                                    <executable>${pnpm.executable}</executable>
                                     <workingDirectory>${project.basedir}/../pds-web</workingDirectory>
                                     <arguments><argument>run</argument><argument>build:pds</argument></arguments>
                                 </configuration>
@@ -167,6 +173,16 @@
                     </plugin>
                 </plugins>
             </build>
+        </profile>
+        <!-- Windows 下 pnpm 的可执行文件为 pnpm.cmd -->
+        <profile>
+            <id>web-windows</id>
+            <activation>
+                <os><family>windows</family></os>
+            </activation>
+            <properties>
+                <pnpm.executable>pnpm.cmd</pnpm.executable>
+            </properties>
         </profile>
     </profiles>
 </project>

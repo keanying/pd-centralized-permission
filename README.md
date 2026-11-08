@@ -72,7 +72,7 @@ keytool -genkeypair -alias pds -keyalg RSA -keysize 2048 -validity 3650 -storety
 - **随 PDS 一起发布**：`mvn -Pweb package`，访问 `{PDS}/console/`，`config.js` 由 PDS 按 `pds.console.*` 自动生成。
 - **单独部署**：`docker build -t pds-web pds-web`，按 `PDS_ISSUER`、`PDS_UPSTREAM` 等环境变量运行；PDS 侧配置 `pds.console.redirect-uris`（以及不经反向代理时的 `pds.cors.allowed-origins`）。
 
-本地开发：PDS 用 `local` 配置启动后，在 `pds-web` 下 `npm run dev`，访问 <http://127.0.0.1:5173/>。
+本地开发：PDS 用 `local` 配置启动后，在 `pds-web` 下 `pnpm install && pnpm dev`，访问 <http://127.0.0.1:5173/>。
 
 ### 运行测试
 

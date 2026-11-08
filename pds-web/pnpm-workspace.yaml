@@ -1,0 +1,4 @@
+# pnpm 设置（单包工程，无子包）
+# @parcel/watcher 的安装脚本仅用于在无预编译二进制时本地编译，预编译版本已通过可选依赖提供，无需执行
+ignoredBuiltDependencies:
+  - '@parcel/watcher'

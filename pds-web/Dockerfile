@@ -1,10 +1,12 @@
 # PDS 管理后台单独部署镜像：构建一次，按环境变量运行于任意环境
 FROM node:22-alpine AS build
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+# 通过 corepack 使用 package.json 中 packageManager 指定的 pnpm 版本
+RUN corepack enable
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
 COPY . .
-RUN npm run build
+RUN pnpm run build
 
 FROM nginx:1.27-alpine
 COPY --from=build /app/dist /usr/share/nginx/html

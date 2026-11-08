@@ -5,8 +5,8 @@ import tailwindcss from '@tailwindcss/vite'
 
 /**
  * 构建期只决定访问路径（VITE_BASE）与输出目录（PDS_WEB_OUT_DIR）：
- *   - 单独部署：npm run build        → base=/          输出 dist/
- *   - 随 PDS 发布：npm run build:pds → base=/console/  输出到 pds-server（见 .env.pds）
+ *   - 单独部署：pnpm build        → base=/          输出 dist/
+ *   - 随 PDS 发布：pnpm build:pds → base=/console/  输出到 pds-server（见 .env.pds）
  * 其余配置（PDS 地址、客户端、接口地址、标题）全部在运行时 config.js 中，同一份产物可用于任意环境。
  */
 export default defineConfig(({ mode }) => {

@@ -15,6 +15,7 @@
 | 样式 | Tailwind CSS 4（不启用 preflight）+ View UI Plus Less 主题（PDS 品牌色 `#1E50E6` / `#22E59A`） |
 | 图表 | ECharts（vue-echarts） |
 | 登录 | OIDC 授权码 + PKCE（公共客户端 `pds-console`，无密钥），令牌仅存于 sessionStorage |
+| 包管理 | **pnpm 10**（版本固定在 `package.json` 的 `packageManager`，锁文件 `pnpm-lock.yaml`）；Node.js 20+ |
 
 > View UI Plus 的样式整体放在最低优先级的级联层 `viewui` 中，避免其全局重置覆盖 Tailwind 工具类。
 
@@ -50,7 +51,9 @@ cd pd_centralized_permission
 mvn -Pweb package
 ```
 
-- `-Pweb` 会执行 `npm ci` 与 `npm run build:pds`，产物打入 PDS 包内，访问 `{PDS 地址}/console/`。
+- `-Pweb` 会在 `pds-web` 下执行 `pnpm install --frozen-lockfile` 与 `pnpm run build:pds`，编译产物输出到 `pds-server/target/classes/static/console/`，随后打入 jar 的 `BOOT-INF/classes/static/console/`，访问 `{PDS 地址}/console/`。
+- 打包机需安装 Node.js 20+ 与 pnpm 10+（`corepack enable` 即可按 `packageManager` 自动使用固定版本）；Windows 下自动改用 `pnpm.cmd`。
+- 编译产物位于 `target/` 下，不提交到 Git；`mvn clean -Pweb package` 会重新编译前端。
 - `config.js` 由 PDS 按自身配置动态生成（`pds.issuer`、`pds.console.*`），无需另外维护。
 - PDS 启动时自动登记/同步客户端 `pds-console`，默认回调地址为 `{pds.issuer}/console/auth/callback`。
 
@@ -82,7 +85,7 @@ docker run -d -p 8080:80 \
 ### 其他静态服务器
 
 ```bash
-npm ci && npm run build
+pnpm install --frozen-lockfile && pnpm build
 ```
 
 将 `dist/` 部署到任意静态服务器，编辑 `dist/config.js`，并配置前端路由回退到 `index.html`。
@@ -106,14 +109,16 @@ cd pd_centralized_permission && mvn -DskipTests package && java -jar pds-server/
 
 ```bash
 # 终端 2：启动前端
-cd pd_centralized_permission/pds-web && npm install && npm run dev
+cd pd_centralized_permission/pds-web && corepack enable && pnpm install && pnpm dev
 ```
 
 访问 <http://127.0.0.1:5173/>（必须用 `127.0.0.1`，OAuth 2.1 不允许 `localhost` 作为回调主机），账号 `admin` / `Pds@Admin2026`。
 
 | 命令 | 说明 |
 |---|---|
-| `npm run dev` | 开发服务器（代理 `/api`、`/oauth2/token` 到本地 PDS） |
-| `npm run build` | 单独部署构建（`dist/`） |
-| `npm run build:pds` | 随 PDS 发布构建（输出到 `pds-server/target/classes/static/console`） |
-| `npm run typecheck` | 类型检查 |
+| `pnpm dev` | 开发服务器（代理 `/api`、`/oauth2/token` 到本地 PDS） |
+| `pnpm build` | 单独部署构建（`dist/`） |
+| `pnpm build:pds` | 随 PDS 发布构建（输出到 `pds-server/target/classes/static/console`） |
+| `pnpm typecheck` | 类型检查 |
+
+> 依赖的安装脚本默认不执行（pnpm 10 安全策略）；`pnpm-workspace.yaml` 中声明了无需执行的 `@parcel/watcher`。新增需要安装脚本的依赖时，用 `pnpm approve-builds` 审核后再提交。
