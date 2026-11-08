@@ -52,6 +52,7 @@
 ```js
 window.__PDS_CONFIG__ = {
   title: 'PDS 统一权限',            // 页面标题
+  brandName: 'PDS',                  // 系统名称（工作台标题等），随 PDS 发布时取 pds.console.brand-name
   issuer: 'https://pds.example.com', // PDS 认证中心地址（浏览器跳转登录）
   apiBaseUrl: '',                    // 接口地址；为空表示与页面同源（随 PDS 发布或经反向代理）
   clientId: 'pds-console',           // 管理后台在 PDS 中的客户端
@@ -93,6 +94,7 @@ docker run -d -p 8080:80 \
 | `PDS_API_BASE_URL` | 否 | 不使用反向代理时浏览器直连的 PDS 接口地址，默认等于 `PDS_ISSUER` |
 | `PDS_CLIENT_ID` | 否 | 默认 `pds-console` |
 | `PDS_TITLE` | 否 | 页面标题 |
+| `PDS_BRAND_NAME` | 否 | 系统名称（工作台标题等处显示），默认 `PDS` |
 
 容器启动脚本 `deploy/40-pds-runtime.sh` 按上述变量生成 `config.js` 与 Nginx 配置（前端路由回退、静态资源缓存、可选反向代理）。
 

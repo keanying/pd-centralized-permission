@@ -213,18 +213,19 @@ public class AssignmentController {
 
     @GetMapping("/graph/user/{userId}")
     public R<GraphDtos.Graph> userGraph(@PathVariable String userId, @RequestParam(required = false) String app,
-                                        @RequestParam(required = false) String risk) {
-        return R.ok(graph.person(userId, app, risk));
+                                        @RequestParam(required = false) String risk,
+                                        @RequestParam(required = false) String source) {
+        return R.ok(graph.person(userId, app, risk, source));
     }
 
     @GetMapping("/graph/app/{app}")
-    public R<GraphDtos.Graph> appGraph(@PathVariable String app) {
-        return R.ok(graph.app(app));
+    public R<GraphDtos.Graph> appGraph(@PathVariable String app, @RequestParam(required = false) String scenicId) {
+        return R.ok(graph.app(app, scenicId));
     }
 
     @GetMapping("/graph/perm")
-    public R<GraphDtos.Graph> permGraph(@RequestParam String code) {
-        return R.ok(graph.perm(code));
+    public R<GraphDtos.Graph> permGraph(@RequestParam String code, @RequestParam(required = false) String scenicId) {
+        return R.ok(graph.perm(code, scenicId));
     }
 
     @GetMapping("/graph/org/{orgId}")
@@ -233,8 +234,8 @@ public class AssignmentController {
     }
 
     @GetMapping("/graph/overview")
-    public R<GraphDtos.Graph> overview() {
-        return R.ok(graph.overview());
+    public R<GraphDtos.Graph> overview(@RequestParam(required = false) String scenicId) {
+        return R.ok(graph.overview(scenicId));
     }
 
     @GetMapping("/graph/explain")

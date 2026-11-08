@@ -223,6 +223,9 @@ export const api = {
   updateNodeType: (code: string, body: object) => put<NodeType>(`/perm-node-types/${code}`, body),
   deleteNodeType: (code: string) => del(`/perm-node-types/${code}`),
   createApp: (body: object) => post('/apps', body),
+  updateApp: (code: string, body: object) => put(`/apps/${code}`, body),
+  appDeleteImpact: (code: string) => get<Record<string, number>>(`/apps/${code}/delete-impact`),
+  deleteApp: (code: string) => del(`/apps/${code}`),
 
   // 分配库
   assignments: (params: object) => get<PageResult<AssignmentRow>>('/assignments', params),
@@ -265,10 +268,10 @@ export const api = {
 
   // 权限图谱
   graphUser: (userId: string, params: object = {}) => get<Graph>(`/graph/user/${userId}`, params),
-  graphApp: (app: string) => get<Graph>(`/graph/app/${app}`),
-  graphPerm: (code: string) => get<Graph>('/graph/perm', { code }),
+  graphApp: (app: string, scenicId?: string) => get<Graph>(`/graph/app/${app}`, { scenicId }),
+  graphPerm: (code: string, scenicId?: string) => get<Graph>('/graph/perm', { code, scenicId }),
   graphOrg: (orgId: string) => get<Graph>(`/graph/org/${orgId}`),
-  graphOverview: () => get<Graph>('/graph/overview'),
+  graphOverview: (scenicId?: string) => get<Graph>('/graph/overview', { scenicId }),
   graphExplain: (userId: string, code: string) => get<GraphExplain>('/graph/explain', { userId, code }),
   graphSimulate: (body: object) => post<{ added: string[]; highRisk: string[]; lost: string[] }>('/graph/simulate', body),
 }

@@ -2,23 +2,60 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message } from 'view-ui-plus'
-import { IconGridView, IconPlus, IconClose } from '@kousum/semi-icons-vue'
+import { IconGridView, IconPlus, IconClose, IconSearch } from '@kousum/semi-icons-vue'
 import { api, type AppView, type ClientView, type PermPoint, type ResourceType } from '@/api'
 import { useSession } from '@/stores/session'
 import { formatTime } from '@/lib/utils'
 import PdsModal from '@/components/pds/PdsModal.vue'
 import OneTimeSecret from '@/components/pds/OneTimeSecret.vue'
+import PillSelect from '@/components/pds/PillSelect.vue'
 
 const route = useRoute()
 const router = useRouter()
 const session = useSession()
 const canManage = computed(() => session.has('pds:app:manage'))
 const apps = ref<AppView[]>([])
-const groups = computed(() => {
-  const map = new Map<string, AppView[]>()
-  apps.value.forEach((a) => map.set(a.categoryName, [...(map.get(a.categoryName) ?? []), a]))
-  return [...map.entries()]
-})
+const q = reactive({ keyword: '', category: '' })
+const rows = computed(() => apps.value.filter((a) => (!q.category || (a.category || '') === q.category)
+  && (!q.keyword || a.name.includes(q.keyword) || a.code.includes(q.keyword.toLowerCase()))))
+async function loadApps() { apps.value = await api.apps() }
+
+const CATEGORIES: Record<string, string> = {
+  APPLICATION: '应用层', QUERY: '查数层', SECURITY: '统一权限', DATA_OUTLET: '数据出口', OFFLINE_GOVERNANCE: '离线治理',
+  REALTIME_GOVERNANCE: '实时治理', DATA_CLEANSING: '数据清洗', DATA_INTEGRATION: '数据集成', FOUNDATION: '公共底座', FEEDBACK: '回流平台',
+}
+// 新增 / 编辑应用
+const appForm = reactive({ open: false, mode: 'create' as 'create' | 'edit', code: '', name: '', category: 'APPLICATION', description: '', accessControl: true })
+function openCreate() { Object.assign(appForm, { open: true, mode: 'create', code: '', name: '', category: 'APPLICATION', description: '', accessControl: true }) }
+function openEdit(a: AppView) {
+  Object.assign(appForm, { open: true, mode: 'edit', code: a.code, name: a.name, category: a.category || '', description: a.description || '', accessControl: a.accessControl })
+}
+async function submitApp() {
+  if (appForm.mode === 'create' && !/^[a-z][a-z0-9_]{1,31}$/.test(appForm.code)) { Message.warning('应用编码只能为小写字母开头的字母数字组合'); return false }
+  if (!appForm.name.trim()) { Message.warning('请填写应用名称'); return false }
+  if (appForm.mode === 'create') {
+    await api.createApp({ code: appForm.code, name: appForm.name.trim(), category: appForm.category || undefined, description: appForm.description || undefined, accessControl: appForm.accessControl })
+    Message.success(`已新增应用，自动生成准入节点 ${appForm.code}:access，可到权限树维护节点`)
+  } else {
+    await api.updateApp(appForm.code, { name: appForm.name.trim(), category: appForm.category, description: appForm.description, accessControl: appForm.accessControl })
+    Message.success('已保存')
+  }
+  await loadApps()
+  const a = apps.value.find((x) => x.code === appForm.code)
+  if (a) open(a)
+}
+// 删除应用：先看影响范围，输入应用编码确认
+const del = reactive({ open: false, app: null as AppView | null, impact: {} as Record<string, number>, confirm: '' })
+async function openDelete(a: AppView) { Object.assign(del, { open: true, app: a, impact: await api.appDeleteImpact(a.code), confirm: '' }) }
+async function submitDelete() {
+  if (del.confirm !== del.app!.code) { Message.warning('请输入应用编码确认删除'); return false }
+  await api.deleteApp(del.app!.code)
+  Message.success('已删除应用')
+  if (cur.value?.code === del.app!.code) close()
+  await loadApps()
+}
+const IMPACT: Record<string, string> = { permNodes: '权限节点', grants: '权限授权记录', rolePerms: '角色中的权限项', resources: '资源实例',
+  resourceGrants: '资源授权记录', appRoles: '应用角色', roleBindings: '应用角色的绑定', clients: 'OAuth 客户端' }
 
 const cur = ref<AppView | null>(null)
 const tab = ref<'perms' | 'types' | 'clients'>('perms')
@@ -36,7 +73,7 @@ async function open(a: AppView) {
 }
 function close() { cur.value = null; router.replace({ query: {} }) }
 onMounted(async () => {
-  apps.value = await api.apps()
+  await loadApps()
   const q = route.query.app as string
   if (q) { const a = apps.value.find((x) => x.code === q); if (a) open(a) }
 })
@@ -63,30 +100,40 @@ async function submitClient() {
 </script>
 
 <template>
-  <div class="grid grid-cols-1 gap-5" :class="cur ? 'xl:grid-cols-[1fr_520px]' : ''">
-    <div class="flex min-w-0 flex-col gap-5">
-      <div v-for="[cat, list] in groups" :key="cat" class="pds-card">
-        <div class="pds-card-title">{{ cat }} <span class="pds-muted font-normal">{{ list.length }} 个应用</span></div>
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-2" :class="cur ? '' : '2xl:grid-cols-3'">
-          <div v-for="a in list" :key="a.code" class="cursor-pointer rounded-2xl p-5 transition-colors"
-               :class="cur?.code === a.code ? 'bg-accent-soft ring-2 ring-accent' : 'bg-row hover:bg-[#ECF1E8]'" @click="open(a)">
-            <div class="flex items-start gap-3">
-              <span class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-ink text-accent"><IconGridView /></span>
-              <div class="min-w-0 flex-1">
-                <div class="truncate font-semibold text-ink">{{ a.name }}</div>
-                <div class="pds-mono pds-muted">{{ a.code }}</div>
-              </div>
-              <span class="pds-badge" :class="a.accessControl ? 'ok' : 'none'">{{ a.accessControl ? '准入控制' : '未开启准入' }}</span>
-            </div>
-            <p class="pds-muted my-3 min-h-[18px]">{{ a.description || '—' }}</p>
-            <div class="flex gap-5 text-[13px]">
-              <span><b class="text-ink">{{ a.permissionCount }}</b> <span class="text-muted">权限点</span></span>
-              <span><b class="text-ink">{{ a.resourceTypeCount }}</b> <span class="text-muted">资源类型</span></span>
-              <span><b class="text-ink">{{ a.clientCount }}</b> <span class="text-muted">客户端</span></span>
-            </div>
-          </div>
-        </div>
+  <div class="grid grid-cols-1 gap-5" :class="cur ? 'xl:grid-cols-[1fr_480px]' : ''">
+    <div class="pds-card min-w-0 self-start">
+      <div class="mb-5 flex flex-wrap items-center gap-3">
+        <div class="pds-search w-[260px]"><IconSearch /><input v-model="q.keyword" placeholder="搜索应用名称或编码" /></div>
+        <PillSelect v-model="q.category" label="分层" compact :options="Object.entries(CATEGORIES).map(([value, label]) => ({ value, label }))" />
+        <span class="flex-1" />
+        <button v-if="canManage" class="pds-btn dark" @click="openCreate"><IconPlus size="small" /> 新增应用</button>
       </div>
+      <table class="pds-table">
+        <thead><tr><th>应用</th><th>所属分层</th><th>准入</th><th>权限节点</th><th>资源类型</th><th>客户端</th><th>清单版本</th><th>操作</th></tr></thead>
+        <tbody>
+          <tr v-for="a in rows" :key="a.code" class="clickable" :class="{ active: cur?.code === a.code }" @click="open(a)">
+            <td>
+              <span class="flex items-center gap-3">
+                <span class="flex size-9 shrink-0 items-center justify-center rounded-xl bg-ink text-accent"><IconGridView size="small" /></span>
+                <span class="min-w-0"><span class="block font-semibold text-ink">{{ a.name }}</span><span class="pds-mono pds-muted block">{{ a.code }}</span></span>
+              </span>
+            </td>
+            <td>{{ a.category ? a.categoryName : '未分类' }}</td>
+            <td><span class="pds-badge" :class="a.accessControl ? 'ok' : 'none'">{{ a.accessControl ? '准入控制' : '未开启' }}</span></td>
+            <td>{{ a.permissionCount }}</td><td>{{ a.resourceTypeCount }}</td><td>{{ a.clientCount }}</td>
+            <td class="pds-mono text-[#6B7280]">{{ a.manifestVersion || '—' }}</td>
+            <td class="whitespace-nowrap" @click.stop>
+              <span class="text-[13px] text-[#6B7280]">
+                <button class="pds-link" @click="router.push({ path: '/perm-tree', query: { app: a.code } })">权限树</button>
+                <template v-if="canManage"> · <button class="pds-link gray" @click="openEdit(a)">编辑</button>
+                  · <button class="pds-link red" :disabled="a.code === 'pds'" :title="a.code === 'pds' ? 'PDS 自身不能删除' : ''" @click="openDelete(a)">删除</button></template>
+              </span>
+            </td>
+          </tr>
+          <tr v-if="!rows.length"><td colspan="8" class="empty">{{ q.keyword || q.category ? '没有匹配的应用' : '还没有接入应用' }}</td></tr>
+        </tbody>
+      </table>
+      <p class="pds-muted mb-0 mt-4">应用也可以由各系统通过权限清单接口自行注册；在这里新增的应用到"权限树"中维护权限节点。</p>
     </div>
 
     <div v-if="cur" class="pds-card self-start border-0 border-l-4 border-solid border-accent">
@@ -142,6 +189,26 @@ async function submitClient() {
         <FormItem label="回调地址"><Input v-model="form.redirectUris" type="textarea" :rows="2" placeholder="授权码方式必填，多个换行；本地开发用 127.0.0.1" /></FormItem>
         <FormItem label="范围"><Input v-model="form.scopes" placeholder="如 openid profile，或 pds.authz pds.audit" /></FormItem>
       </Form>
+    </PdsModal>
+    <PdsModal v-model="appForm.open" :title="appForm.mode === 'create' ? '新增应用' : `编辑应用 · ${appForm.name}`" :ok-text="appForm.mode === 'create' ? '新增' : '保存'" :on-ok="submitApp">
+      <div class="pds-form flex flex-col gap-4">
+        <div class="grid grid-cols-2 gap-4">
+          <div><div class="pds-label">应用编码</div><Input v-model="appForm.code" :disabled="appForm.mode === 'edit'" placeholder="小写字母，如 pdq" /></div>
+          <div><div class="pds-label">应用名称</div><Input v-model="appForm.name" placeholder="如 PDQ 即席自助" /></div>
+        </div>
+        <div><div class="pds-label">所属分层</div>
+          <Select v-model="appForm.category" clearable transfer placeholder="未分类"><Option v-for="(l, k) in CATEGORIES" :key="k" :value="k">{{ l }}</Option></Select></div>
+        <div><div class="pds-label">说明</div><Input v-model="appForm.description" /></div>
+        <label class="flex items-center gap-2 text-[13px]"><Switch v-model="appForm.accessControl" size="small" :disabled="appForm.code === 'pds'" /> 应用准入：人员须获得"登录进入"权限才能单点登录该应用</label>
+      </div>
+    </PdsModal>
+    <PdsModal v-model="del.open" :title="`删除应用 · ${del.app?.name}`" ok-text="确认删除" danger :on-ok="submitDelete">
+      <div class="pds-banner bad mb-4 text-[13px]">删除后以下数据将一并删除且不可恢复，相关人员立即失去对应权限：</div>
+      <div class="mb-4 grid grid-cols-2 gap-2">
+        <div v-for="(l, k) in IMPACT" :key="k" class="flex justify-between rounded-xl bg-row px-4 py-2 text-[13px]"><span>{{ l }}</span><b :class="del.impact[k] ? 'text-danger' : 'text-ink'">{{ del.impact[k] ?? 0 }}</b></div>
+      </div>
+      <p class="pds-muted mt-0">配置文件中定义的开发客户端会在 PDS 重启时重新登记。请输入应用编码 <b class="pds-mono text-ink">{{ del.app?.code }}</b> 确认：</p>
+      <Input v-model="del.confirm" class="pds-mono" :placeholder="del.app?.code" />
     </PdsModal>
     <OneTimeSecret v-model="secret.open" title="客户端已创建" label="客户端密钥" :value="secret.value" />
   </div>

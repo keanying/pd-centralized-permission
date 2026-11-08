@@ -32,6 +32,7 @@ public class ConsoleController {
         PdsProperties.Console c = props.getConsole();
         Map<String, Object> cfg = new LinkedHashMap<>();
         cfg.put("title", c.getTitle());
+        cfg.put("brandName", c.getBrandName());
         cfg.put("issuer", props.getIssuer());
         cfg.put("apiBaseUrl", c.getApiBaseUrl());
         cfg.put("clientId", c.getClientId());

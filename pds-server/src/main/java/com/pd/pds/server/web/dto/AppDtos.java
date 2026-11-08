@@ -82,4 +82,7 @@ public final class AppDtos {
                                @NotBlank @Pattern(regexp = "ALLOW|DENY") String effect,
                                Instant validFrom, Instant validTo, String reason) {
     }
+
+    public record UpdateApp(String name, String category, String description, Boolean accessControl) {
+    }
 }

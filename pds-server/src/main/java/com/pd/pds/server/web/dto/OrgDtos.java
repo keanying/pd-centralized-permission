@@ -16,7 +16,7 @@ public final class OrgDtos {
                             @NotBlank String code, @NotBlank String name, Integer sort, String leaderId) {
     }
 
-    public record UpdateOrg(String name, Integer sort, String leaderId, Integer status, String parentId) {
+    public record UpdateOrg(String name, Integer sort, String leaderId, Integer status, String parentId, String code) {
     }
 
     public static final class OrgNode {

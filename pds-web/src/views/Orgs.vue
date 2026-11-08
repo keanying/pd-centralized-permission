@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message, Modal } from 'view-ui-plus'
-import { IconSearch, IconFilter, IconImport, IconPlus, IconMore, IconUserGroup, IconArrowUp, IconBolt } from '@kousum/semi-icons-vue'
+import { IconSearch, IconFilter, IconImport, IconPlus, IconMore, IconUserGroup, IconArrowUp, IconBolt, IconEdit } from '@kousum/semi-icons-vue'
 import {
   api, flattenOrgs, ORG_TYPES, DATA_SCOPES, type GroupView, type OrgNode, type Position, type UserView, type Credential,
   type OrgInfo, type NodeGrant, type PreviewItem, type MembersPreview, type HistoryItem, type RoleView,
@@ -237,7 +237,7 @@ async function submitCreate() {
 const importOpen = ref(false)
 
 // ---------------- 组织操作
-const orgForm = reactive({ open: false, mode: 'create' as 'create' | 'edit', node: null as OrgNode | null, type: 'DEPT', code: '', name: '', sort: 0, parentId: '' })
+const orgForm = reactive({ open: false, mode: 'create' as 'create' | 'edit', node: null as OrgNode | null, type: 'DEPT', code: '', name: '', sort: 0, parentId: '', leaderId: '' })
 function onOrgAction(name: string, n: OrgNode) {
   if (name === 'inherit') {
     if (orgId.value !== n.id) { orgId.value = n.id }
@@ -245,7 +245,8 @@ function onOrgAction(name: string, n: OrgNode) {
     return
   }
   if (name === 'create') Object.assign(orgForm, { open: true, mode: 'create', node: n, type: n.type === 'GROUP' ? 'SCENIC' : 'DEPT', code: '', name: '', sort: 0 })
-  else if (name === 'edit') Object.assign(orgForm, { open: true, mode: 'edit', node: n, type: n.type, code: n.code, name: n.name, sort: n.sort, parentId: n.parentId || '' })
+  else if (name === 'edit') Object.assign(orgForm, { open: true, mode: 'edit', node: n, type: n.type, code: n.code, name: n.name, sort: n.sort, parentId: n.parentId || '',
+    leaderId: info.value?.id === n.id ? info.value.leaderId || '' : '' })
   else if (name === 'delete') {
     Modal.confirm({
       title: '删除组织', content: `确定删除【${n.name}】？组织下不能有下级组织和人员。`, okText: '删除',
@@ -258,7 +259,8 @@ async function submitOrg() {
   if (orgForm.mode === 'create') {
     await api.createOrg({ parentId: orgForm.node!.id, type: orgForm.type, code: orgForm.code.trim(), name: orgForm.name.trim(), sort: orgForm.sort })
   } else {
-    await api.updateOrg(orgForm.node!.id, { name: orgForm.name.trim(), sort: orgForm.sort,
+    await api.updateOrg(orgForm.node!.id, { name: orgForm.name.trim(), code: orgForm.code.trim(), sort: orgForm.sort,
+      leaderId: orgForm.leaderId || undefined,
       parentId: orgForm.parentId && orgForm.parentId !== orgForm.node!.parentId ? orgForm.parentId : undefined })
   }
   Message.success('已保存')
@@ -352,35 +354,35 @@ function removeMember(m: { id: string; name: string }) {
 
     <!-- 右：节点详情 / 用户组成员 -->
     <div class="flex min-w-0 flex-col gap-5">
-      <div v-if="mode === 'org' && info" class="pds-card" style="padding: 22px 28px">
-        <div class="flex flex-wrap items-center gap-3">
-          <h2 class="m-0 text-[24px] font-bold text-ink">{{ info.name }}</h2>
-          <span class="pds-badge gray">{{ ORG_TYPES[info.type] || info.type }}</span>
-          <span class="flex-1" />
-          <button v-if="canUser" class="pds-btn dark" @click="Object.assign(add, { open: true, users: [], primary: true, positionId: '' })"><IconPlus size="small" /> 添加人员</button>
-          <button v-if="canOrg && !info.root" class="pds-btn ghost" @click="selectedOrg && onOrgAction('edit', selectedOrg)">移动</button>
-          <Dropdown v-if="canOrg && selectedOrg" trigger="click" transfer placement="bottom-end" @on-click="(n: string) => onOrgAction(n, selectedOrg!)">
-            <button class="pds-icon-btn"><IconMore /></button>
-            <template #list><DropdownMenu>
-              <DropdownItem name="create">新增下级组织</DropdownItem>
-              <DropdownItem name="edit">编辑</DropdownItem>
-              <DropdownItem v-if="!info.root" name="delete" divided>删除</DropdownItem>
-            </DropdownMenu></template>
-          </Dropdown>
-        </div>
-        <div class="mt-3 flex flex-wrap items-center gap-6 text-[14px] text-[#6B7280]">
-          <span>编码 {{ info.code }}</span>
-          <span>负责人 {{ info.leaderName || '未指定' }}</span>
-          <span>成员 {{ info.memberCount.toLocaleString('en-US') }} 人<template v-if="info.memberCount !== info.directMemberCount">（本级 {{ info.directMemberCount }}）</template></span>
-          <label v-if="!info.root" class="flex items-center gap-2" :class="info.inheritFromParent ? 'text-accent-text' : 'text-warn'">
-            <Switch :model-value="info.inheritFromParent" size="small" :disabled="!canGrant" @on-change="toggleInherit" />
-            继承上级权限：{{ info.inheritFromParent ? '开' : '关（已阻断）' }}
-          </label>
-        </div>
-      </div>
-
       <div class="pds-card min-w-0">
         <template v-if="mode === 'org'">
+          <!-- 节点标题：名称、编码可直接修改（含根组织） -->
+          <div v-if="info" class="mb-5 flex flex-wrap items-center gap-x-5 gap-y-2">
+            <button class="group flex cursor-pointer items-center gap-2 border-0 bg-transparent p-0" :disabled="!canOrg" title="修改名称、编码、负责人"
+                    @click="selectedOrg && onOrgAction('edit', selectedOrg)">
+              <span class="text-[22px] font-bold text-ink">{{ info.name }}</span>
+              <IconEdit v-if="canOrg" size="small" class="text-[#9CA3AF] group-hover:text-accent-text" />
+            </button>
+            <span class="pds-badge gray">{{ ORG_TYPES[info.type] || info.type }}</span>
+            <span class="text-[13px] text-[#6B7280]">编码 {{ info.code }}</span>
+            <span class="text-[13px] text-[#6B7280]">负责人 {{ info.leaderName || '未指定' }}</span>
+            <span class="text-[13px] text-[#6B7280]">成员 {{ info.memberCount.toLocaleString('en-US') }} 人</span>
+            <label v-if="!info.root" class="flex items-center gap-2 text-[13px]" :class="info.inheritFromParent ? 'text-accent-text' : 'text-warn'">
+              <Switch :model-value="info.inheritFromParent" size="small" :disabled="!canGrant" @on-change="toggleInherit" />
+              继承上级权限：{{ info.inheritFromParent ? '开' : '关（已阻断）' }}
+            </label>
+            <span class="flex-1" />
+            <button v-if="canUser" class="pds-btn dark sm" @click="Object.assign(add, { open: true, users: [], primary: true, positionId: '' })"><IconPlus size="small" /> 添加人员</button>
+            <Dropdown v-if="canOrg && selectedOrg" trigger="click" transfer placement="bottom-end" @on-click="(n: string) => onOrgAction(n, selectedOrg!)">
+              <button class="pds-icon-btn" style="width: 32px; height: 32px"><IconMore size="small" /></button>
+              <template #list><DropdownMenu>
+                <DropdownItem name="edit">编辑名称 / 编码 / 负责人</DropdownItem>
+                <DropdownItem v-if="!info.root" name="edit">移动到…</DropdownItem>
+                <DropdownItem name="create">新增下级组织</DropdownItem>
+                <DropdownItem v-if="!info.root" name="delete" divided>删除</DropdownItem>
+              </DropdownMenu></template>
+            </Dropdown>
+          </div>
           <div class="pds-tabs">
             <button :class="{ on: tab === 'members' }" @click="tab = 'members'">成员</button>
             <button :class="{ on: tab === 'positions' }" @click="tab = 'positions'">岗位</button>
@@ -562,12 +564,14 @@ function removeMember(m: { id: string; name: string }) {
     </PdsModal>
 
     <PdsModal v-model="orgForm.open" :title="orgForm.mode === 'create' ? `在【${orgForm.node?.name}】下新增组织` : `编辑组织 · ${orgForm.node?.name}`" :on-ok="submitOrg">
+      <p v-if="orgForm.mode === 'edit' && orgForm.node?.type === 'GROUP'" class="pds-muted mt-0">根组织的名称、编码可按企业实际修改（如"浙江景旅集团"）。</p>
       <Form :label-width="80">
         <FormItem v-if="orgForm.mode === 'create'" label="类型">
           <RadioGroup v-model="orgForm.type" type="button"><Radio v-for="t in ['COMPANY', 'SCENIC', 'DEPT', 'TEAM']" :key="t" :label="t">{{ ORG_TYPES[t] }}</Radio></RadioGroup>
         </FormItem>
-        <FormItem label="编码" required><Input v-model="orgForm.code" :disabled="orgForm.mode === 'edit'" placeholder="全局唯一，批量导入时使用，如 XH_TICKET" /></FormItem>
+        <FormItem label="编码" required><Input v-model="orgForm.code" placeholder="全局唯一，批量导入时使用，如 XH_TICKET" /></FormItem>
         <FormItem label="名称" required><Input v-model="orgForm.name" /></FormItem>
+        <FormItem v-if="orgForm.mode === 'edit'" label="负责人"><UserSelect v-model="orgForm.leaderId" placeholder="可选" /></FormItem>
         <FormItem label="排序"><InputNumber v-model="orgForm.sort" :min="0" /></FormItem>
         <FormItem v-if="orgForm.mode === 'edit' && orgForm.node?.type !== 'GROUP'" label="上级组织">
           <Select v-model="orgForm.parentId" filterable transfer>

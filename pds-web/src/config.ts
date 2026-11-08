@@ -3,6 +3,8 @@ const raw = window.__PDS_CONFIG__ ?? ({} as PdsRuntimeConfig)
 
 export const config = {
   title: raw.title || 'PDS 统一权限',
+  /** 系统名称（工作台标题等），可配置 */
+  brandName: raw.brandName || 'PDS',
   issuer: (raw.issuer || window.location.origin).replace(/\/+$/, ''),
   apiBaseUrl: (raw.apiBaseUrl || '').replace(/\/+$/, ''),
   clientId: raw.clientId || 'pds-console',

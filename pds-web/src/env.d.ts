@@ -10,6 +10,7 @@ declare module 'view-ui-plus'
 
 interface PdsRuntimeConfig {
   title?: string
+  brandName?: string
   issuer: string
   apiBaseUrl?: string
   clientId: string

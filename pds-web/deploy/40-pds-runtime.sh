@@ -20,6 +20,7 @@ json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 cat > "$HTML_DIR/config.js" <<JS
 window.__PDS_CONFIG__ = {
   title: "$(json_escape "$PDS_TITLE")",
+  brandName: "$(json_escape "${PDS_BRAND_NAME:-PDS}")",
   issuer: "$(json_escape "$PDS_ISSUER")",
   apiBaseUrl: "$(json_escape "$PDS_API_BASE_URL")",
   clientId: "$(json_escape "$PDS_CLIENT_ID")"

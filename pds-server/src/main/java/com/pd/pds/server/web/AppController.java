@@ -23,8 +23,27 @@ public class AppController {
 
     private final AppService apps;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pd.pds.server.service.AppAdminService appAdmin;
+
     public AppController(AppService apps) {
         this.apps = apps;
+    }
+
+    @org.springframework.web.bind.annotation.PutMapping("/apps/{app}")
+    public R<com.pd.pds.server.entity.AppInfo> updateApp(@PathVariable String app, @RequestBody AppDtos.UpdateApp req) {
+        return R.ok(appAdmin.update(app, req));
+    }
+
+    @GetMapping("/apps/{app}/delete-impact")
+    public R<java.util.Map<String, Long>> deleteImpact(@PathVariable String app) {
+        return R.ok(appAdmin.deleteImpact(app));
+    }
+
+    @DeleteMapping("/apps/{app}")
+    public R<Void> deleteApp(@PathVariable String app) {
+        appAdmin.delete(app);
+        return R.ok();
     }
 
     @GetMapping("/apps")

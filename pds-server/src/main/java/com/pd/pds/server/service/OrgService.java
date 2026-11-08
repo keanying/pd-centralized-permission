@@ -145,8 +145,14 @@ public class OrgService {
         ResolvedScope scope = guard.require(PdsPermissions.ORG_MANAGE);
         OrgUnit o = require(id);
         guard.requireCovers(scope, o, PdsPermissions.ORG_MANAGE);
-        if (req.name() != null) {
-            o.setName(req.name());
+        if (req.name() != null && !req.name().isBlank()) {
+            o.setName(req.name().trim());
+        }
+        if (req.code() != null && !req.code().isBlank() && !req.code().trim().equals(o.getCode())) {
+            if (orgMapper.selectCount(new LambdaQueryWrapper<OrgUnit>().eq(OrgUnit::getCode, req.code().trim())) > 0) {
+                throw BizException.duplicate("组织编码【" + req.code().trim() + "】");
+            }
+            o.setCode(req.code().trim());
         }
         if (req.sort() != null) {
             o.setSort(req.sort());

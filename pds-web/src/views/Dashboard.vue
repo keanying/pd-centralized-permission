@@ -4,7 +4,8 @@ import { useRouter } from 'vue-router'
 import { IconShield, IconEdit, IconHourglass } from '@kousum/semi-icons-vue'
 import NumberTicker from '@/components/inspira/NumberTicker.vue'
 import HeroIllustration from '@/components/pds/HeroIllustration.vue'
-import { api, type Overview } from '@/api'
+import { api, type Overview, type OrgNode } from '@/api'
+import { config } from '@/config'
 import { useSession } from '@/stores/session'
 import { usePage } from '@/stores/page'
 
@@ -16,9 +17,11 @@ const week = ref<'this' | 'last'>('this')
 const hoverBar = ref<number | null>(null)
 const hoverAi = ref<number | null>(null)
 
+const tree = ref<OrgNode[]>([])
 onMounted(async () => {
   page.set('工作台', { subtitle: `欢迎回来，${session.me?.name ?? ''}` })
   d.value = await api.overview()
+  if (session.has('pds:org:view')) tree.value = await api.orgTree().catch(() => [])
 })
 
 const fmt = (n: number) => n.toLocaleString('en-US')
@@ -45,8 +48,33 @@ const sparkPath = computed(() => {
 })
 
 const scenicMax = computed(() => Math.max(1, ...(d.value?.scenics ?? []).map((s) => s.users)))
-// 景区分布示意点（景区尚无坐标，按顺序均匀分布于示意区域内）
-const DOTS = [[30, 48], [63, 42], [70, 35], [48, 62], [80, 58], [40, 30]]
+
+// 景区分布图谱：集团居中，一级组织（景区等）环绕，二级组织在外圈；节点大小按人数（含下级）
+const total = (n: OrgNode): number => n.userCount + n.children.reduce((a, c) => a + total(c), 0)
+const orgGraph = computed(() => {
+  const root = tree.value[0]
+  if (!root) return null
+  const cx = 160, cy = 130
+  const l1 = root.children
+  const max = Math.max(1, ...l1.map(total))
+  const nodes: { id: string; name: string; x: number; y: number; r: number; users: number; level: number; type: string; alt?: boolean }[] = []
+  const edges: { x1: number; y1: number; x2: number; y2: number }[] = []
+  nodes.push({ id: root.id, name: root.name, x: cx, y: cy, r: 22, users: total(root), level: 0, type: root.type })
+  l1.forEach((n, i) => {
+    const a = (i / Math.max(1, l1.length)) * Math.PI * 2 - Math.PI / 2
+    const x = cx + Math.cos(a) * 78, y = cy + Math.sin(a) * 70
+    nodes.push({ id: n.id, name: n.name, x, y, r: 7 + 9 * Math.sqrt(total(n) / max), users: total(n), level: 1, type: n.type })
+    edges.push({ x1: cx, y1: cy, x2: x, y2: y })
+    const kids = n.children.slice(0, 4)
+    kids.forEach((k, j) => {
+      const b = a + (j - (kids.length - 1) / 2) * 0.55
+      const kx = cx + Math.cos(b) * 128, ky = cy + Math.sin(b) * 112
+      nodes.push({ id: k.id, name: k.name, x: kx, y: ky, r: 5, users: total(k), level: 2, type: k.type, alt: j % 2 === 1 })
+      edges.push({ x1: x, y1: y, x2: kx, y2: ky })
+    })
+  })
+  return { nodes, edges }
+})
 
 const sec = computed(() => d.value?.security)
 const activationPct = computed(() => (sec.value && sec.value.activeUsers ? Math.round((sec.value.activatedUsers / sec.value.activeUsers) * 100) : 0))
@@ -71,8 +99,7 @@ const aiEmpty = computed(() => (d.value?.aiUsage ?? []).every((a) => !a.chats &&
     <div class="relative overflow-hidden rounded-[24px] bg-ink px-8 py-8 text-white xl:col-span-4">
       <div class="relative z-10 grid grid-cols-1 items-center gap-6 lg:grid-cols-[1.1fr_1fr_0.75fr]">
         <div>
-          <h2 class="m-0 text-[34px] font-bold leading-tight">PDS 统一权限</h2>
-          <p class="mb-6 mt-2 text-[14px] text-white/60">统一登录 · 角色授权 · 景区隔离 · 字段脱敏 · 访问审计</p>
+          <h2 class="m-0 mb-6 text-[34px] font-bold leading-tight">{{ config.brandName }}</h2>
           <div class="grid grid-cols-2 gap-4">
             <div class="rounded-2xl bg-ink-2 px-4 py-4">
               <div class="text-[12px] text-white/60">在线人数</div>
@@ -135,13 +162,19 @@ const aiEmpty = computed(() => (d.value?.aiUsage ?? []).every((a) => !a.chats &&
     <!-- 景区分布（跨两行） -->
     <div class="pds-card xl:row-span-2">
       <div class="pds-card-title">景区分布</div>
-      <div class="relative mx-auto my-4 h-[210px] max-w-[320px]">
-        <svg viewBox="0 0 100 80" class="h-full w-full" aria-hidden="true">
-          <polygon points="6,30 40,14 64,12 90,26 82,44 86,68 60,76 38,70 18,72 6,52" fill="#E3EBDD" stroke="#CFDCC4" stroke-width=".6" />
+      <div class="mx-auto my-2 max-w-[340px]">
+        <svg v-if="orgGraph" viewBox="0 0 320 260" class="w-full">
+          <line v-for="(e, i) in orgGraph.edges" :key="i" :x1="e.x1" :y1="e.y1" :x2="e.x2" :y2="e.y2" stroke="#D5DFCC" stroke-width="1.2" />
+          <g v-for="n in orgGraph.nodes" :key="n.id" class="cursor-pointer" @click="router.push({ path: '/orgs', query: { org: n.id } })">
+            <title>{{ n.name }}：{{ n.users }} 人</title>
+            <circle :cx="n.x" :cy="n.y" :r="n.r" :fill="n.level === 0 ? '#1F2421' : n.type === 'SCENIC' ? '#A3D65C' : n.level === 1 ? '#C7E39B' : '#E3EBDD'"
+                    :stroke="n.level === 2 ? '#C9D6BE' : '#fff'" stroke-width="2" />
+            <text v-if="n.level === 0" :x="n.x" :y="n.y + 4" text-anchor="middle" font-size="10" fill="#fff" font-weight="600">{{ n.users }}</text>
+            <text :x="n.x" :y="n.level === 2 && n.alt ? n.y - n.r - 4 : n.y + n.r + (n.level === 2 ? 10 : 13)" text-anchor="middle" :font-size="n.level === 2 ? 9 : 11"
+                  :fill="n.level === 2 ? '#6B7280' : '#1F2421'" :font-weight="n.level === 1 ? 600 : 400">{{ n.name.length > 7 ? n.name.slice(0, 7) + '…' : n.name }}</text>
+          </g>
         </svg>
-        <span v-for="(s, i) in (d?.scenics ?? []).slice(0, DOTS.length)" :key="s.id"
-              class="absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-solid border-ink bg-accent"
-              :style="{ left: DOTS[i][0] + '%', top: DOTS[i][1] + '%' }" :title="`${s.name}：${s.users} 人`" />
+        <div v-else class="flex h-[180px] items-center justify-center text-sm text-muted">暂无组织数据</div>
       </div>
       <div class="flex flex-col gap-2">
         <div v-for="s in d?.scenics" :key="s.id" class="relative overflow-hidden rounded-xl bg-row px-4 py-2.5">

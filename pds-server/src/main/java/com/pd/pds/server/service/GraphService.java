@@ -84,6 +84,10 @@ public class GraphService {
     private final PermTreeService treeService;
     private final Guard guard;
     private final AuthzService authz;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pd.pds.server.mapper.PositionMapper positionMapper;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pd.pds.server.mapper.UserGroupMapper groupMapper;
 
     public GraphService(SysUserMapper userMapper, OrgUnitMapper orgMapper, UserOrgMapper userOrgMapper, RoleMapper roleMapper,
                         RolePermMapper rolePermMapper, RoleBindingMapper bindingMapper, AuthGrantMapper grantMapper,
@@ -150,7 +154,7 @@ public class GraphService {
 
     // ------------------------------------------------------------------ 以人为中心
 
-    public GraphDtos.Graph person(String userId, String app, String risk) {
+    public GraphDtos.Graph person(String userId, String app, String risk, String source) {
         guard.require(PdsPermissions.AUTHZ_QUERY);
         SysUser u = authz.requireUser(userId);
         UserProfile profile = authz.loadProfile(u);
@@ -199,7 +203,16 @@ public class GraphService {
             PermPoint p = perms.get(code);
             if (p == null) return false;
             if (StringUtils.hasText(app) && !app.equals(p.getAppCode())) return false;
-            return !StringUtils.hasText(risk) || risk.equals(p.getRisk());
+            if (StringUtils.hasText(risk) && !risk.equals(p.getRisk())) return false;
+            if (!StringUtils.hasText(source)) return true;
+            Decision dd = eff.explain(code);
+            List<SourceRef> refs = new ArrayList<>(dd.allowRefs());
+            refs.addAll(dd.denyRefs());
+            return refs.stream().anyMatch(r -> switch (source) {
+                case "ROLE" -> r.kind() == SourceRef.Kind.ROLE;
+                case "USER" -> r.kind() == SourceRef.Kind.DIRECT_ALLOW || r.kind() == SourceRef.Kind.DIRECT_DENY;
+                default -> r.subjectType() != null && r.subjectType().name().equals(source);
+            });
         };
 
         // 角色绑定
@@ -259,11 +272,61 @@ public class GraphService {
             g.edge(subjectNode(rg.getSubjectType(), rg.getSubjectId(), me), nid,
                     "ALLOW".equals(rg.getEffect()) ? "GRANT" : "DENY", "ALLOW".equals(rg.getEffect()) ? "授予" : "禁止");
         }
+        if (StringUtils.hasText(app) || StringUtils.hasText(risk) || StringUtils.hasText(source)) {
+            prune(g, me);
+        }
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("permissions", eff.permissionCodes().size());
         summary.put("highRisk", eff.permissionCodes().stream().filter(c -> perms.containsKey(c) && "HIGH".equals(perms.get(c).getRisk())).count());
         summary.put("denied", ordered.stream().filter(c -> !eff.explain(c).denySources().isEmpty()).count());
         return g.build(summary);
+    }
+
+    /** 筛选后去掉不再连到任何权限/资源的角色与主体节点（中心节点及其直接所属组织、岗位、用户组保留）。 */
+    private static void prune(Builder g, String center) {
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (String id : List.copyOf(g.nodes.keySet())) {
+                GraphDtos.Node n = g.nodes.get(id);
+                if (n.center() || n.type().equals("PERM") || n.type().equals("RESOURCE") || n.type().equals("APP")) continue;
+                boolean hasOut = g.edges.values().stream().anyMatch(e -> e.source().equals(id)
+                        && !e.kind().equals("PARENT") && !e.target().equals(center));
+                boolean direct = g.edges.values().stream().anyMatch(e -> e.source().equals(center) && e.target().equals(id));
+                if (n.type().equals("ROLE") ? !hasOut : (!hasOut && !direct)) {
+                    g.nodes.remove(id);
+                    g.edges.values().removeIf(e -> e.source().equals(id) || e.target().equals(id));
+                    changed = true;
+                }
+            }
+        }
+        // 没有权限节点连接的应用节点也去掉
+        g.nodes.values().removeIf(n -> n.type().equals("APP") && !n.center()
+                && g.edges.values().stream().noneMatch(e -> e.target().equals(n.id())));
+    }
+
+    /** 主体是否属于某景区（集团级组织、未限定景区的岗位/用户组视为覆盖全部景区）。 */
+    private boolean inScenic(String type, String id, String scenicId) {
+        if (!StringUtils.hasText(scenicId)) return true;
+        return switch (type) {
+            case "USER" -> java.util.Optional.ofNullable(userMapper.selectById(id)).map(u -> scenicId.equals(u.getScenicId())).orElse(false);
+            case "ORG" -> java.util.Optional.ofNullable(orgMapper.selectById(id))
+                    .map(o -> scenicId.equals(o.getScenicId()) || o.getScenicId() == null).orElse(false);
+            default -> {
+                String sc = subjectScenic(type, id);
+                yield sc == null || scenicId.equals(sc);
+            }
+        };
+    }
+
+    private String subjectScenic(String type, String id) {
+        if ("POSITION".equals(type)) {
+            return java.util.Optional.ofNullable(positionMapper.selectById(id)).map(com.pd.pds.server.entity.Position::getScenicId).orElse(null);
+        }
+        if ("GROUP".equals(type)) {
+            return java.util.Optional.ofNullable(groupMapper.selectById(id)).map(com.pd.pds.server.entity.UserGroup::getScenicId).orElse(null);
+        }
+        return null;
     }
 
     private String subjectNode(String type, String id, String me) {
@@ -298,8 +361,17 @@ public class GraphService {
 
     // ------------------------------------------------------------------ 以应用为中心
 
-    public GraphDtos.Graph app(String app) {
+    public GraphDtos.Graph app(String app, String scenicId) {
         guard.require(PdsPermissions.AUTHZ_QUERY);
+        scenicTl.set(scenicId);
+        try {
+            return appGraph(app);
+        } finally {
+            scenicTl.remove();
+        }
+    }
+
+    private GraphDtos.Graph appGraph(String app) {
         Map<String, String> apps = appNames();
         if (!apps.containsKey(app)) throw BizException.notFound("应用【" + app + "】");
         Builder g = new Builder();
@@ -339,7 +411,12 @@ public class GraphService {
         return g.build(summary);
     }
 
+    private final ThreadLocal<String> scenicTl = new ThreadLocal<>();
+
     private String addSubject(Builder g, String type, String id, Boolean includeChildren) {
+        if (!inScenic(type, id, scenicTl.get())) {
+            return "__filtered__";
+        }
         String nid = sid(type, id);
         String sub = switch (type) {
             case "USER" -> java.util.Optional.ofNullable(userMapper.selectById(id)).map(SysUser::getEmpNo).orElse(null);
@@ -353,8 +430,17 @@ public class GraphService {
 
     // ------------------------------------------------------------------ 以权限为中心
 
-    public GraphDtos.Graph perm(String code) {
+    public GraphDtos.Graph perm(String code, String scenicId) {
         guard.require(PdsPermissions.AUTHZ_QUERY);
+        scenicTl.set(scenicId);
+        try {
+            return permGraph(code);
+        } finally {
+            scenicTl.remove();
+        }
+    }
+
+    private GraphDtos.Graph permGraph(String code) {
         PermPoint p = pointMapper.selectById(code);
         if (p == null) throw BizException.notFound("权限节点");
         Map<String, String> apps = appNames();
@@ -437,7 +523,7 @@ public class GraphService {
 
     // ------------------------------------------------------------------ 全局总览
 
-    public GraphDtos.Graph overview() {
+    public GraphDtos.Graph overview(String scenicId) {
         guard.require(PdsPermissions.AUTHZ_QUERY);
         Map<String, String> apps = appNames();
         Builder g = new Builder();
@@ -456,6 +542,7 @@ public class GraphService {
         }
         // 景区及以上组织
         for (OrgUnit o : orgMapper.selectList(new LambdaQueryWrapper<OrgUnit>().in(OrgUnit::getType, List.of("GROUP", "COMPANY", "SCENIC")))) {
+            if (StringUtils.hasText(scenicId) && !(o.getId().equals(scenicId) || o.getScenicId() == null)) continue;
             g.node(sid("ORG", o.getId()), "ORG", o.getName(), orgTypeLabel(o.getType()), null, null, false,
                     Map.of("members", members.of("ORG", o.getId(), true).size()));
             if (o.getParentId() != null) {
@@ -463,6 +550,7 @@ public class GraphService {
             }
         }
         for (RoleBinding b : bindingMapper.selectList(new LambdaQueryWrapper<RoleBinding>().eq(RoleBinding::getSubjectType, "ORG"))) {
+            if (!g.nodes.containsKey(sid("ORG", b.getSubjectId()))) continue;
             g.edge(sid("ORG", b.getSubjectId()), sid("ROLE", b.getRoleId()), "BIND", "绑定");
         }
         for (AuthGrant x : grantMapper.selectList(new LambdaQueryWrapper<AuthGrant>().eq(AuthGrant::getSubjectType, "ORG"))) {

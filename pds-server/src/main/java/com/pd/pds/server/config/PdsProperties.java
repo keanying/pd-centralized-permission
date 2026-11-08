@@ -51,6 +51,8 @@ public class PdsProperties {
         /** 前端调用 PDS 接口的地址；为空表示与页面同源（随 PDS 发布或经反向代理）。 */
         private String apiBaseUrl = "";
         private String title = "PDS 统一权限";
+        /** 工作台等处显示的系统名称（简称），如 PDS */
+        private String brandName = "PDS";
     }
 
     /** 跨域：前端单独部署且不经反向代理时，填写前端来源（如 https://pds-admin.example.com）。 */

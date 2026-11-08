@@ -12,6 +12,7 @@ import { useSession } from '@/stores/session'
 import { downloadCsv } from '@/lib/utils'
 import PdsModal from '@/components/pds/PdsModal.vue'
 import UserSelect from '@/components/pds/UserSelect.vue'
+import PillSelect from '@/components/pds/PillSelect.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -26,6 +27,8 @@ const sel = reactive({
   orgId: (route.query.orgId as string) || '',
   filterApp: (route.query.fapp as string) || '',
   risk: (route.query.risk as string) || '',
+  source: (route.query.source as string) || '',
+  scenic: (route.query.scenic as string) || '',
 })
 const apps = ref<AppView[]>([])
 const perms = ref<PermNode[]>([])
@@ -76,11 +79,11 @@ async function load() {
   highlight.value = new Set()
   try {
     let g: Graph | null = null
-    if (view.value === 'person') { if (!sel.userId) { graph.value = null; vnodes.value = []; return } g = await api.graphUser(sel.userId, { app: sel.filterApp || undefined, risk: sel.risk || undefined }) }
-    else if (view.value === 'app') { if (!sel.app) return; g = await api.graphApp(sel.app) }
-    else if (view.value === 'perm') { if (!sel.code) { graph.value = null; vnodes.value = []; return } g = await api.graphPerm(sel.code) }
+    if (view.value === 'person') { if (!sel.userId) { graph.value = null; vnodes.value = []; return } g = await api.graphUser(sel.userId, { app: sel.filterApp || undefined, risk: sel.risk || undefined, source: sel.source || undefined }) }
+    else if (view.value === 'app') { if (!sel.app) return; g = await api.graphApp(sel.app, sel.scenic || undefined) }
+    else if (view.value === 'perm') { if (!sel.code) { graph.value = null; vnodes.value = []; return } g = await api.graphPerm(sel.code, sel.scenic || undefined) }
     else if (view.value === 'org') { if (!sel.orgId) return; g = await api.graphOrg(sel.orgId) }
-    else g = await api.graphOverview()
+    else g = await api.graphOverview(sel.scenic || undefined)
     graph.value = g
     layout(g)
     fit()
@@ -97,9 +100,10 @@ function syncUrl() {
     ...(view.value === 'perm' && sel.code ? { code: sel.code } : {}),
     ...(view.value === 'org' && sel.orgId ? { orgId: sel.orgId } : {}),
     ...(sel.filterApp ? { fapp: sel.filterApp } : {}), ...(sel.risk ? { risk: sel.risk } : {}),
+    ...(sel.source ? { source: sel.source } : {}), ...(sel.scenic ? { scenic: sel.scenic } : {}),
   } })
 }
-watch([view, () => sel.userId, () => sel.app, () => sel.code, () => sel.orgId, () => sel.filterApp, () => sel.risk], () => { syncUrl(); load() })
+watch([view, () => sel.userId, () => sel.app, () => sel.code, () => sel.orgId, () => sel.filterApp, () => sel.risk, () => sel.source, () => sel.scenic], () => { syncUrl(); load() })
 watch(() => sel.userId, async (id) => { if (id) { const u = await api.user(id); userLabel.value = `${u.name}${u.empNo ? `（${u.empNo}）` : ''}` } }, { immediate: true })
 
 onMounted(async () => {
@@ -302,7 +306,17 @@ function exportCsv() {
       STYLE[byId.value.get(e.target)?.d.type || '']?.label, name(e.target)]),
   ])
 }
-function onExport(n: string) { n === 'svg' ? exportSvg() : exportCsv() }
+function onAction(n: string) {
+  if (n === 'explain') explainSelected()
+  else if (n === 'simulate') openSimulate()
+  else if (n === 'svg') exportSvg()
+  else exportCsv()
+}
+const scenics = computed(() => orgs.value.filter((o) => o.type === 'SCENIC'))
+const SOURCES: Record<string, string> = { ROLE: '角色', ORG: '组织', POSITION: '岗位', GROUP: '用户组', USER: '个人直授' }
+const RISKS: Record<string, string> = { HIGH: '高', MEDIUM: '中', LOW: '低' }
+const filtersOn = computed(() => (view.value === 'person' ? [sel.filterApp, sel.risk, sel.source] : [sel.scenic]).some(Boolean))
+function resetFilters() { Object.assign(sel, { filterApp: '', risk: '', source: '', scenic: '' }) }
 
 const VIEWS: { k: View; l: string }[] = [
   { k: 'person', l: '以人为中心' }, { k: 'app', l: '以应用为中心' }, { k: 'perm', l: '以权限为中心' }, { k: 'org', l: '以组织为中心' }, { k: 'overview', l: '全局总览' },
@@ -316,44 +330,49 @@ watch(() => sel.userId, () => nextTick(() => (pickerOpen.value = false)))
 
 <template>
   <div class="flex flex-col gap-5">
-    <!-- 工具栏 -->
-    <div class="pds-card flex flex-wrap items-center gap-3" style="padding: 16px 20px">
-      <div class="pds-segment row">
-        <button v-for="v in VIEWS" :key="v.k" :class="{ on: view === v.k }" @click="view = v.k">{{ v.l }}</button>
-      </div>
+    <!-- 筛选栏 + 操作菜单 -->
+    <div class="pds-card flex flex-wrap items-center gap-2.5" style="padding: 14px 20px">
+      <Dropdown trigger="click" transfer @on-click="(v: string) => (view = v as View)">
+        <button class="pds-chip dark" style="height: 36px; padding: 0 14px; font-size: 13px">视图：{{ VIEWS.find((v) => v.k === view)?.l }} <IconTriangleDown size="extra-small" /></button>
+        <template #list><DropdownMenu><DropdownItem v-for="v in VIEWS" :key="v.k" :name="v.k" :selected="v.k === view">{{ v.l }}</DropdownItem></DropdownMenu></template>
+      </Dropdown>
 
       <Poptip v-if="view === 'person'" v-model="pickerOpen" placement="bottom-start" transfer width="320">
         <button class="pds-chip on" style="height: 36px; padding: 0 14px; font-size: 13px"><IconUser size="small" /> {{ userLabel || '选择人员' }} <IconTriangleDown size="extra-small" /></button>
         <template #content><UserSelect v-model="sel.userId" /></template>
       </Poptip>
       <Dropdown v-else-if="view === 'app'" trigger="click" transfer @on-click="(v: string) => (sel.app = v)">
-        <button class="pds-chip on" style="height: 36px; padding: 0 14px; font-size: 13px">{{ appLabel }} <IconTriangleDown size="extra-small" /></button>
-        <template #list><DropdownMenu><DropdownItem v-for="a in apps" :key="a.code" :name="a.code">{{ a.name }}</DropdownItem></DropdownMenu></template>
+        <button class="pds-chip on" style="height: 36px; padding: 0 14px; font-size: 13px">应用：{{ appLabel }} <IconTriangleDown size="extra-small" /></button>
+        <template #list><DropdownMenu><DropdownItem v-for="a in apps" :key="a.code" :name="a.code" :selected="a.code === sel.app">{{ a.name }}</DropdownItem></DropdownMenu></template>
       </Dropdown>
-      <Select v-else-if="view === 'perm'" v-model="sel.code" filterable transfer style="width: 300px" :placeholder="permLabel">
+      <Select v-else-if="view === 'perm'" v-model="sel.code" filterable transfer style="width: 280px" :placeholder="permLabel">
         <Option v-for="p in perms" :key="p.code" :value="p.code" :label="`${p.name}（${p.code}）`">{{ p.name }} <span class="pds-mono text-[#9CA3AF]">{{ p.code }}</span></Option>
       </Select>
-      <Select v-else-if="view === 'org'" v-model="sel.orgId" filterable transfer style="width: 240px" :placeholder="orgLabel">
+      <Select v-else-if="view === 'org'" v-model="sel.orgId" filterable transfer style="width: 220px" :placeholder="orgLabel">
         <Option v-for="o in orgs" :key="o.id" :value="o.id" :label="o.name"><span :style="{ paddingLeft: o.depth * 14 + 'px' }">{{ o.name }}</span></Option>
       </Select>
 
+      <span class="mx-1 h-5 w-px bg-[#E5E7EB]" />
       <template v-if="view === 'person'">
-        <Dropdown trigger="click" transfer @on-click="(v: string) => (sel.filterApp = v === '__all' ? '' : v)">
-          <button class="pds-chip" style="height: 36px; padding: 0 14px; font-size: 13px">应用{{ sel.filterApp ? '：' + (apps.find((a) => a.code === sel.filterApp)?.name || sel.filterApp) : '' }} <IconTriangleDown size="extra-small" /></button>
-          <template #list><DropdownMenu><DropdownItem name="__all">全部应用</DropdownItem><DropdownItem v-for="a in apps" :key="a.code" :name="a.code">{{ a.name }}</DropdownItem></DropdownMenu></template>
-        </Dropdown>
-        <Dropdown trigger="click" transfer @on-click="(v: string) => (sel.risk = v === '__all' ? '' : v)">
-          <button class="pds-chip" style="height: 36px; padding: 0 14px; font-size: 13px">风险等级{{ sel.risk ? '：' + ({ HIGH: '高', MEDIUM: '中', LOW: '低' } as any)[sel.risk] : '' }} <IconTriangleDown size="extra-small" /></button>
-          <template #list><DropdownMenu><DropdownItem name="__all">全部</DropdownItem><DropdownItem name="HIGH">高</DropdownItem><DropdownItem name="MEDIUM">中</DropdownItem><DropdownItem name="LOW">低</DropdownItem></DropdownMenu></template>
-        </Dropdown>
+        <PillSelect v-model="sel.filterApp" label="应用" compact :options="apps.map((a) => ({ value: a.code, label: a.name }))" />
+        <PillSelect v-model="sel.risk" label="风险等级" compact :options="Object.entries(RISKS).map(([value, label]) => ({ value, label }))" />
+        <PillSelect v-model="sel.source" label="来源" compact :options="Object.entries(SOURCES).map(([value, label]) => ({ value, label }))" />
       </template>
+      <PillSelect v-else-if="view !== 'org'" v-model="sel.scenic" label="景区" compact :options="scenics.map((o) => ({ value: o.id, label: o.name }))" />
+      <span v-else class="pds-muted">以组织为中心时按所选组织展示</span>
+      <button v-if="filtersOn" class="pds-link gray ml-1" @click="resetFilters">重置筛选</button>
 
       <span class="flex-1" />
-      <button class="pds-btn accent" @click="explainSelected">路径解释</button>
-      <button class="pds-btn ghost" @click="openSimulate">权限模拟</button>
-      <Dropdown trigger="click" transfer placement="bottom-end" @on-click="onExport">
-        <button class="pds-btn ghost">导出</button>
-        <template #list><DropdownMenu><DropdownItem name="svg">导出图片（SVG）</DropdownItem><DropdownItem name="csv">导出关系清单（CSV）</DropdownItem></DropdownMenu></template>
+      <Dropdown trigger="click" transfer placement="bottom-end" @on-click="onAction">
+        <button class="pds-btn accent">操作 <IconTriangleDown size="extra-small" /></button>
+        <template #list>
+          <DropdownMenu>
+            <DropdownItem name="explain" :disabled="view !== 'person'">路径解释（先点选权限节点）</DropdownItem>
+            <DropdownItem name="simulate" :disabled="view !== 'person'">权限模拟</DropdownItem>
+            <DropdownItem name="svg" divided>导出图片（SVG）</DropdownItem>
+            <DropdownItem name="csv">导出关系清单（CSV）</DropdownItem>
+          </DropdownMenu>
+        </template>
       </Dropdown>
     </div>
 

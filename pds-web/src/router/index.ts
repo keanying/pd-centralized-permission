@@ -20,7 +20,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'roles', name: 'roles', component: () => import('@/views/SystemRoles.vue'), meta: { title: '系统角色', subtitle: '角色定义、继承与下发', perms: ['pds:role:view'] } },
       { path: 'resources', redirect: { path: '/assignments', query: { objectType: 'RESOURCE' } } },
       { path: 'user-grants', name: 'userGrants', component: () => import('@/views/UserGrants.vue'), meta: { title: '人员明细权限', perms: ['pds:grant:manage', 'pds:authz:query'] } },
-      { path: 'apps', name: 'apps', component: () => import('@/views/Apps.vue'), meta: { title: '应用管理', perms: ['pds:role:view'] } },
+      { path: 'apps', name: 'apps', component: () => import('@/views/Apps.vue'), meta: { title: '应用中心', subtitle: '接入 PDS 的全部系统：新增、编辑、删除应用，管理客户端', perms: ['pds:role:view'] } },
       { path: 'audit', name: 'audit', component: () => import('@/views/Audit.vue'), meta: { title: '审计中心', perms: ['pds:audit:view'] } },
       { path: 'me', name: 'me', component: () => import('@/views/Me.vue'), meta: { title: '个人设置' } },
       { path: 'forbidden', name: 'forbidden', component: () => import('@/views/Forbidden.vue'), meta: { title: '无权访问' } },
