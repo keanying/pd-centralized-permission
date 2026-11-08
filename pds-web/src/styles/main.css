@@ -102,3 +102,46 @@ body {
 .pds-pager button { width: 32px; height: 32px; border-radius: 50%; border: 0; background: var(--color-row); color: #374151; cursor: pointer; font-size: 12px; }
 .pds-pager button.active { background: var(--color-accent); color: #1F2421; font-weight: 600; }
 .pds-pager button:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ---------- V2：表单（设计稿：大圆角输入框，标签在上） ---------- */
+.pds-form .pds-label { font-size: 12px; color: var(--color-muted); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.pds-form .ivu-input, .pds-form .ivu-select-selection { border-radius: 12px; }
+.pds-form .ivu-input-large, .pds-form .ivu-select-large .ivu-select-selection { height: 44px; }
+.pds-form .ivu-select-large.ivu-select-single .ivu-select-selection .ivu-select-placeholder,
+.pds-form .ivu-select-large.ivu-select-single .ivu-select-selection .ivu-select-selected-value { height: 42px; line-height: 42px; }
+.pds-readonly { height: 44px; border-radius: 12px; background: var(--color-row); display: flex; align-items: center; justify-content: space-between; padding: 0 16px; color: #4B5563; }
+.pds-seg { display: inline-flex; width: 100%; background: var(--color-row); border-radius: 22px; padding: 4px; gap: 4px; }
+.pds-seg button { flex: 1; height: 36px; border: 0; border-radius: 18px; background: transparent; cursor: pointer; font-size: 14px; color: #374151; }
+.pds-seg button.on { background: var(--color-ink); color: #fff; }
+.pds-seg button.on.low { background: var(--color-accent); color: var(--color-ink); }
+.pds-seg button.on.mid { background: #F59E0B; color: #fff; }
+.pds-seg button.on.high { background: var(--color-danger); color: #fff; }
+.pds-seg.dark-off button { color: #6B7280; }
+
+/* 下划线页签 */
+.pds-tabs { display: flex; gap: 28px; border-bottom: 1px solid #EEF1EC; margin-bottom: 24px; }
+.pds-tabs button { background: none; border: 0; padding: 0 0 12px; font-size: 14px; color: #6B7280; cursor: pointer; position: relative; }
+.pds-tabs button.on { color: var(--color-ink); font-weight: 600; }
+.pds-tabs button.on::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--color-ink); border-radius: 2px; }
+
+/* 分段（深色选中） */
+.pds-segment { display: inline-flex; background: #fff; border-radius: 22px; padding: 4px; gap: 2px; }
+.pds-segment.row { background: var(--color-row); }
+.pds-segment button { height: 34px; padding: 0 16px; border: 0; border-radius: 17px; background: transparent; cursor: pointer; font-size: 13px; color: #374151; white-space: nowrap; }
+.pds-segment button.on { background: var(--color-ink); color: #fff; }
+
+/* 小胶囊筛选 */
+.pds-chip { height: 26px; padding: 0 10px; border-radius: 13px; border: 0; background: var(--color-row); font-size: 12px; color: #374151; cursor: pointer; white-space: nowrap; }
+.pds-chip.on { background: var(--color-accent-soft); color: var(--color-accent-text); font-weight: 600; }
+.pds-chip.dark { background: var(--color-ink); color: #fff; }
+
+/* 提示条 */
+.pds-banner { display: flex; align-items: center; gap: 10px; border-radius: 16px; padding: 14px 18px; font-size: 14px; }
+.pds-banner.ok { background: var(--color-accent-soft); color: var(--color-accent-text); }
+.pds-banner.warn { background: var(--color-warn-soft-2); color: #92400E; }
+.pds-banner.bad { background: var(--color-danger-soft); color: var(--color-danger); }
+.pds-banner.gray { background: var(--color-row); color: #4B5563; }
+
+/* 圆形图标按钮 */
+.pds-icon-btn { width: 40px; height: 40px; border-radius: 50%; border: 1px solid #E5E7EB; background: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: #374151; }
+.pds-icon-btn:hover { background: var(--color-row); }

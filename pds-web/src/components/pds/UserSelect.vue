@@ -18,18 +18,22 @@ async function search(q: string) {
 }
 search('')
 
-// 预置的人员 ID 不在当前选项中时补充加载，保证显示姓名
+// 预置的人员 ID 不在当前选项中时补充加载，保证显示姓名；只有补充加载后才重建下拉（避免选择时重建导致弹层报错、关闭）
+const ver = ref(0)
 watch(model, async (v) => {
   const ids = Array.isArray(v) ? v : v ? [v] : []
+  let loaded = false
   for (const id of ids) {
     if (!options.value.some((o) => o.id === id)) {
       try {
         options.value = [await api.user(id), ...options.value]
+        loaded = true
       } catch {
         /* 无权查看时忽略 */
       }
     }
   }
+  if (loaded) ver.value++
 }, { immediate: true })
 const defaultLabel = computed(() => {
   const ids = Array.isArray(model.value) ? model.value : model.value ? [model.value] : []
@@ -40,7 +44,7 @@ defineExpose({ options })
 </script>
 
 <template>
-  <Select :key="String(defaultLabel)" v-model="model" filterable remote :remote-method="search" :loading="loading" :multiple="multiple"
+  <Select :key="ver" v-model="model" filterable remote :remote-method="search" :loading="loading" :multiple="multiple"
           :default-label="defaultLabel"
           :placeholder="placeholder || '输入姓名、账号或工号搜索'" clearable transfer>
     <Option v-for="u in options" :key="u.id" :value="u.id" :label="`${u.name}（${u.username}）`">

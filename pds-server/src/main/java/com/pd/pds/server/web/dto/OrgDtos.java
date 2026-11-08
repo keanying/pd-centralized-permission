@@ -29,6 +29,8 @@ public final class OrgDtos {
         public Integer sort;
         public Integer status;
         public long userCount;
+        /** false 表示阻断继承上级组织的节点权限 */
+        public boolean inheritFromParent = true;
         public List<OrgNode> children = new ArrayList<>();
     }
 

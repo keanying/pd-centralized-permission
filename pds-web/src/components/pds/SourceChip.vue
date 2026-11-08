@@ -9,14 +9,16 @@ const SUBJECT: Record<string, string> = { POSITION: '岗位', ORG: '组织', GRO
 
 function label(r: SourceRef) {
   switch (r.kind) {
-    case 'DIRECT_ALLOW': return '个人直授'
+    case 'DIRECT_ALLOW': return '个人直授' + (r.viaNode ? '·上级' : '')
     case 'DIRECT_DENY': return '个人禁止'
+    case 'GRANT_ALLOW': return `${SUBJECT[r.subjectType || ''] || '节点'}：${r.subjectName}`
+    case 'GRANT_DENY': return `${SUBJECT[r.subjectType || ''] || '节点'}禁止：${r.subjectName}`
     case 'DISABLED': return '权限点已停用'
     case 'ROLE': return r.subjectType && r.subjectType !== 'USER' ? `${SUBJECT[r.subjectType]}：${r.subjectName}` : `角色：${r.roleName}`
     default: return r.subjectName ? `${SUBJECT[r.subjectType || ''] || '授权'}：${r.subjectName}` : r.text
   }
 }
-const cls = (r: SourceRef) => (r.kind === 'DIRECT_ALLOW' ? 'dark' : r.kind === 'DIRECT_DENY' || r.kind === 'RESOURCE_DENY' ? 'bad' : 'gray')
+const cls = (r: SourceRef) => (r.kind === 'DIRECT_ALLOW' ? 'dark' : ['DIRECT_DENY', 'RESOURCE_DENY', 'GRANT_DENY'].includes(r.kind) ? 'bad' : 'gray')
 const first = computed(() => props.refs[0])
 const tip = computed(() => props.refs.map((r) => r.text + (r.validTo ? `，有效期至 ${formatTime(r.validTo)}` : '')).join('\n'))
 </script>

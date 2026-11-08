@@ -112,7 +112,8 @@ public final class RoleDtos {
     /** 人员明细权限页：某应用下每个权限点的状态与来源。 */
     public record PermissionState(String code, String name, String type, String risk, String state,
                                   List<String> allowSources, List<String> denySources, Object dataScope,
-                                  List<com.pd.pds.authz.SourceRef> allowRefs, List<com.pd.pds.authz.SourceRef> denyRefs) {
+                                  List<com.pd.pds.authz.SourceRef> allowRefs, List<com.pd.pds.authz.SourceRef> denyRefs,
+                                  int depth, boolean visible) {
     }
 
     /**

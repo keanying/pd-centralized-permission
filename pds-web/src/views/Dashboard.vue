@@ -150,7 +150,7 @@ const aiEmpty = computed(() => (d.value?.aiUsage ?? []).every((a) => !a.chats &&
             <span class="text-ink">{{ s.name }}</span><b class="text-ink">{{ fmt(s.users) }} 人</b>
           </div>
         </div>
-        <div v-if="d && !d.scenics.length" class="py-6 text-center text-sm text-muted">尚未建立景区，可在"组织架构与人员"中新增</div>
+        <div v-if="d && !d.scenics.length" class="py-6 text-center text-sm text-muted">尚未建立景区，可在"架构树"中新增</div>
       </div>
     </div>
 

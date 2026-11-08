@@ -114,7 +114,7 @@ async function submitClient() {
         <template v-else-if="tab === 'types'">
           <div v-for="t in types" :key="t.typeCode" class="flex items-center justify-between rounded-xl bg-row px-4 py-3 mb-2">
             <span class="text-ink">{{ t.name }} <span class="pds-mono pds-muted">{{ t.typeCode }}</span></span>
-            <button class="pds-link" @click="router.push({ path: '/roles', query: { tab: 'resources' } })">去授权</button>
+            <button class="pds-link" @click="router.push({ path: '/assignments', query: { view: 'app', objectType: 'RESOURCE' } })">去授权</button>
           </div>
           <p v-if="!types.length" class="pds-muted py-6 text-center">该应用未声明可授权的资源类型</p>
         </template>

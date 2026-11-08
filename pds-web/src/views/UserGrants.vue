@@ -168,7 +168,7 @@ async function explainSelected() {
   <div v-if="!userId" class="pds-card flex flex-col items-center gap-4 py-16">
     <div class="text-[16px] font-semibold text-ink">选择要查看或调整权限的人员</div>
     <div class="w-[360px]"><UserSelect v-model="userId" placeholder="输入姓名、账号或工号" /></div>
-    <p class="pds-muted m-0">也可以在"组织架构与人员"中点击人员的"权限"进入。</p>
+    <p class="pds-muted m-0">也可以在"架构树"中点击人员的"权限"进入。</p>
   </div>
 
   <div v-else class="flex flex-col gap-5">
@@ -206,12 +206,14 @@ async function explainSelected() {
           </div>
           <template v-if="!collapsed.has(a.code)">
             <div v-for="p in effs[a.code]?.permissions ?? []" :key="p.code"
-                 class="flex min-h-[44px] cursor-pointer items-center gap-3 border-0 border-b border-solid border-[#F0F2EE] px-6 py-2 text-[14px] transition-colors last:border-b-0"
+                 class="flex min-h-[44px] cursor-pointer items-center gap-3 border-0 border-b border-solid border-[#F0F2EE] py-2 pr-6 text-[14px] transition-colors last:border-b-0"
+                 :style="{ paddingLeft: 24 + (p.depth || 0) * 20 + 'px' }"
                  :class="selected === p.code ? 'bg-[#F6FAEF]' : 'hover:bg-[#FAFBF8]'" @click="selected = selected === p.code ? '' : p.code">
               <span class="min-w-0 flex-1">
                 <span class="text-[#374151]">{{ p.code }}</span> <span class="text-ink">{{ p.name }}</span>
                 <span v-if="p.risk === 'HIGH'" class="pds-badge bad ml-1" style="height: 18px">高风险</span>
               </span>
+              <span v-if="p.state === 'NONE' && p.visible" class="pds-badge gray" title="下级节点已授予，此节点对其可见（如菜单），但未拥有本节点">路径可见</span>
               <span class="pds-badge" :class="STATE[p.state].cls">{{ STATE[p.state].label }}</span>
               <span class="w-[132px] shrink-0"><SourceChip :refs="p.state === 'DENIED' ? p.denyRefs : p.allowRefs" /></span>
             </div>
@@ -305,7 +307,7 @@ async function explainSelected() {
 
     <!-- 设置有效期 -->
     <PdsModal v-model="validity.open" :title="`设置有效期 · ${user?.name}`" width="640" ok-text="保存" :on-ok="submitValidity">
-      <p class="pds-muted mt-0">有效期设置在人员明细记录（个人直授 / 个人禁止）上；角色、岗位上的有效期请在"角色与授权"中调整。</p>
+      <p class="pds-muted mt-0">有效期设置在人员明细记录（个人直授 / 个人禁止）上；角色绑定、组织与岗位上的授权有效期请在"分配库"中调整。</p>
       <div v-for="r in validity.rows" :key="r.rec.id" class="mb-2 flex items-center gap-3 rounded-xl bg-row px-4 py-3">
         <span class="pds-badge" :class="r.rec.effect === 'ALLOW' ? 'dark' : 'bad'">{{ r.rec.effect === 'ALLOW' ? '个人直授' : '个人禁止' }}</span>
         <span class="min-w-0 flex-1 truncate text-[13px]">{{ r.rec.permName || r.rec.resourceName }}<span v-if="r.rec.action" class="pds-muted">（{{ ACTIONS[r.rec.action] }}）</span></span>

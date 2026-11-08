@@ -92,6 +92,7 @@ public class OrgService {
             n.scenicId = o.getScenicId();
             n.sort = o.getSort();
             n.status = o.getStatus();
+            n.inheritFromParent = !Boolean.FALSE.equals(o.getInheritFromParent());
             n.userCount = counts.getOrDefault(o.getId(), 0L);
             nodes.put(o.getId(), n);
         }

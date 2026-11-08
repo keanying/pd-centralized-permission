@@ -8,7 +8,15 @@ PDS 面向客户总体架构中的**全部系统**通用：应用层（票付通
 |---|---|
 | ![PDS 统一登录页](docs/images/pds-login.png) | ![管理后台工作台](docs/images/console-dashboard.png) |
 
-![人员明细权限](docs/images/console-user-grants.png)
+**V2 权限中心**（按 UX Pilot 设计稿实现）
+
+| 权限树 | 架构树 · 节点权限 |
+|---|---|
+| ![权限树](docs/images/console-perm-tree.png) | ![架构树](docs/images/console-org-tree.png) |
+| **分配库** | **系统角色 · 下发状态** |
+| ![分配库](docs/images/console-assignments.png) | ![系统角色](docs/images/console-roles.png) |
+| **权限图谱** | **人员明细权限** |
+| ![权限图谱](docs/images/console-graph.png) | ![人员明细权限](docs/images/console-user-grants.png) |
 
 ## 文档
 
@@ -81,8 +89,8 @@ keytool -genkeypair -alias pds -keyalg RSA -keysize 2048 -validity 3650 -storety
 mvn test
 ```
 
-- `pds-authz-engine`：13 个引擎单元测试（禁止优先、组织继承、有效期、数据范围并集、资源动作层级、景区约束、密级、停用权限点、按应用过滤、结构化授权来源）
-- `pds-server`：13 个端到端集成测试（授权码 + PKCE 单点登录、管理后台公共客户端、首次登录强制改密、登录锁定、令牌交换、应用准入、权限清单、资源授权、人员明细禁止、鉴权开放接口、三员分立、停用即吊销、审计哈希链、工作台统计、批量导入、个人授权有效期、单条审计校验）
+- `pds-authz-engine`：17 个引擎单元测试（禁止优先、组织继承、有效期、数据范围并集、资源动作层级、景区约束、密级、停用权限点、按应用过滤、结构化授权来源；V2：授予父节点含非高风险下级、禁止父节点含全部下级、上级路径可见、组织节点授权与草稿节点不生效）
+- `pds-server`：13 个端到端集成测试（授权码 + PKCE 单点登录、管理后台公共客户端、首次登录强制改密、登录锁定、令牌交换、应用准入、权限清单、资源授权、人员明细禁止、鉴权开放接口、三员分立、停用即吊销、审计哈希链、工作台统计、批量导入、个人授权有效期、单条审计校验；V2：节点类型维护、权限树草稿/发布/编码锁定、组织节点授权与阻断继承、影响分析、分配库、应用角色继承/互斥/外部编码/Webhook 下发、快照 roles、权限图谱与路径解释、加人预览）
 
 指定 PostgreSQL 运行集成测试：
 
@@ -104,6 +112,12 @@ mvn -pl pds-server test -Dspring.datasource.url=jdbc:postgresql://localhost:5432
 | 人员明细权限 | `GET /api/v1/users/{id}/effective?app=`、`GET/POST/DELETE /api/v1/users/{id}/perms`、`PUT /api/v1/users/{id}/perms/{permId}`（修改有效期）、`PUT /api/v1/users/{id}/scenic-scope`、`PUT /api/v1/security-levels` |
 | 管理后台 | `GET /api/v1/dashboard/overview`、`GET /api/v1/resources`、`GET /api/v1/resource-types`、`GET /api/v1/apps/{app}/clients`、`GET /api/v1/role-bindings`、`GET /api/v1/groups/{id}/members`、`GET /console/config.js` |
 | 鉴权开放 | `POST /api/v1/authz/check`、`POST /api/v1/authz/batch-check`、`GET /api/v1/authz/snapshot`、`GET /api/v1/authz/explain`、`GET /api/v1/authz/resources/accessible` |
+| 权限树（V2） | `GET /api/v1/perm-tree/apps`、`GET /api/v1/perm-tree?app=`、`GET /api/v1/perm-tree/grantable`、`GET/POST/PUT/DELETE /api/v1/perm-nodes`、`POST /api/v1/perm-nodes/{id}/disable|enable|discard`、`GET /api/v1/perm-nodes/{id}/holders|history`、`GET /api/v1/perm-tree/{app}/diff|versions|next-version`、`POST /api/v1/perm-tree/{app}/publish`、`GET/POST/PUT/DELETE /api/v1/perm-node-types`、`POST /api/v1/apps` |
+| 分配库（V2） | `GET /api/v1/assignments`（按应用/主体/权限及多条件筛选）、`GET /api/v1/assignments/stats`、`POST /api/v1/assignments/impact`、`POST /api/v1/assignments/batch`、`PUT /api/v1/assignments/{id}`、`POST /api/v1/assignments/renew|revoke|copy` |
+| 架构树（V2） | `GET /api/v1/orgs/{id}/info|grants|effective-preview|positions|history`、`POST /api/v1/orgs/{id}/grants`、`PUT /api/v1/orgs/{id}/inherit`、`POST /api/v1/orgs/{id}/members/preview`、`POST /api/v1/orgs/{id}/members`、`PUT /api/v1/orgs/{id}/members/{userId}/inherit` |
+| 系统角色（V2） | `PUT/DELETE /api/v1/roles/{id}`、`POST /api/v1/roles/{id}/copy`、`PUT /api/v1/roles/{id}/mutex`、`GET/PUT /api/v1/roles/{id}/mappings`、`GET /api/v1/roles/{id}/versions|members|distribution`、`POST /api/v1/roles/{id}/versions/{vid}/restore`、`POST /api/v1/roles/{id}/reconcile` |
+| 下发（V2） | `GET /api/v1/dist/subscriptions`、`GET/PUT /api/v1/dist/subscriptions/{app}`、`GET /api/v1/dist/deliveries`、`GET /api/v1/dist/deliveries/{id}/payload`、`POST /api/v1/dist/deliveries/{id}/retry` |
+| 权限图谱（V2） | `GET /api/v1/graph/user/{userId}|app/{app}|org/{orgId}|overview`、`GET /api/v1/graph/perm?code=`、`GET /api/v1/graph/explain`、`POST /api/v1/graph/simulate` |
 | 审计 | `GET /api/v1/audit/events`（可按人员、事件类型、应用、结果、景区、时间筛选）、`GET /api/v1/audit/verify`（全链校验）、`GET /api/v1/audit/events/{id}/verify`（单条校验）、`POST /api/v1/audit/events`（应用上报） |
 | 个人中心 | `GET /api/v1/me`、`POST /api/v1/me/password` |
 

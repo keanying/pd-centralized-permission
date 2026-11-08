@@ -95,15 +95,34 @@ public class GrantService {
         assertManageable(user, guard.has(PdsPermissions.GRANT_MANAGE) ? PdsPermissions.GRANT_MANAGE : PdsPermissions.AUTHZ_QUERY);
         EffectivePermissions eff = authz.effective(userId);
 
+        // 按权限树顺序（父在前、同级按排序），草稿节点不显示
+        List<PermPoint> points = pointMapper.selectList(new LambdaQueryWrapper<PermPoint>().eq(PermPoint::getAppCode, app)
+                .ne(PermPoint::getStatus, 2));
+        Map<String, PermPoint> byId = new java.util.HashMap<>();
+        points.forEach(p -> { if (p.getId() != null) byId.put(p.getId(), p); });
+        Map<String, List<PermPoint>> children = new java.util.HashMap<>();
+        for (PermPoint p : points) {
+            String parent = p.getParentId() != null && byId.containsKey(p.getParentId()) ? p.getParentId() : "__root";
+            children.computeIfAbsent(parent, k -> new ArrayList<>()).add(p);
+        }
+        children.values().forEach(l -> l.sort(java.util.Comparator.comparing((PermPoint p) -> p.getSort() == null ? 0 : p.getSort())
+                .thenComparing(PermPoint::getCode)));
+        List<Map.Entry<PermPoint, Integer>> ordered = new ArrayList<>();
+        java.util.function.BiConsumer<String, Integer>[] walk = new java.util.function.BiConsumer[1];
+        walk[0] = (pid, depth) -> children.getOrDefault(pid, List.of()).forEach(p -> {
+            ordered.add(Map.entry(p, depth));
+            walk[0].accept(p.getId(), depth + 1);
+        });
+        walk[0].accept("__root", 0);
         List<RoleDtos.PermissionState> perms = new ArrayList<>();
-        for (PermPoint p : pointMapper.selectList(new LambdaQueryWrapper<PermPoint>().eq(PermPoint::getAppCode, app)
-                .orderByAsc(PermPoint::getCode))) {
+        for (Map.Entry<PermPoint, Integer> e : ordered) {
+            PermPoint p = e.getKey();
             Decision d = eff.explain(p.getCode());
             String state = d.allowed() ? "GRANTED" : (d.denySources().isEmpty() ? "NONE" : "DENIED");
             ResolvedScope scope = eff.scopeOf(p.getCode());
             perms.add(new RoleDtos.PermissionState(p.getCode(), p.getName(), p.getType(), p.getRisk(), state,
                     d.allowSources(), d.denySources(), scope == null || scope.isEmpty() ? null : scope,
-                    d.allowRefs(), d.denyRefs()));
+                    d.allowRefs(), d.denyRefs(), e.getValue(), eff.visibleCodes().contains(p.getCode())));
         }
 
         List<RoleDtos.ResourceState> resources = new ArrayList<>();
