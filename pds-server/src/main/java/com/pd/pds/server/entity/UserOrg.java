@@ -16,4 +16,6 @@ public class UserOrg {
     private String orgId;
     private String positionId;
     private Boolean isPrimary;
+    /** 是否继承该组织的节点权限（兼职可关闭） */
+    private Boolean inheritPerms;
 }

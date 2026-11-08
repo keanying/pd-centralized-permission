@@ -8,6 +8,7 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 @SpringBootApplication
 @ConfigurationPropertiesScan
 @MapperScan("com.pd.pds.server.mapper")
+@org.springframework.scheduling.annotation.EnableScheduling
 public class PdsServerApplication {
 
     public static void main(String[] args) {

@@ -40,6 +40,6 @@ public final class AuthzDtos {
     public record Snapshot(long version, String app, SnapshotUser user, Set<String> permissions,
                            Map<String, Object> dataScopes, Set<String> scenicScope,
                            Map<String, Map<String, Set<String>>> resources, int maxSecurityLevel,
-                           List<Object> maskPolicies, int expiresIn) {
+                           List<Object> maskPolicies, int expiresIn, List<String> roles, Set<String> visible) {
     }
 }

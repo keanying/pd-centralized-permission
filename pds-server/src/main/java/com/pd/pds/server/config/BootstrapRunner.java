@@ -64,6 +64,12 @@ public class BootstrapRunner implements ApplicationRunner {
     private final PasswordEncoder passwordEncoder;
     private final AuthzService authz;
     private final AuditService audit;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pd.pds.server.mapper.PermPointMapper pointMapper;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pd.pds.server.mapper.RoleMutexMapper mutexMapper;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pd.pds.server.service.PermNodeTypeService nodeTypes;
 
     public BootstrapRunner(PdsProperties props, TransactionTemplate tx, AppService appService, ClientService clientService,
                            AppInfoMapper appMapper, OrgUnitMapper orgMapper, RoleMapper roleMapper, RolePermMapper rolePermMapper,
@@ -88,9 +94,11 @@ public class BootstrapRunner implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         tx.executeWithoutResult(s -> {
+            backfillNodeIds();
             registerPdsManifest();
             ensureRootOrg();
             Map<String, String> roleIds = ensureBuiltinRoles();
+            ensureSeparationMutex(roleIds);
             ensureAdmin(roleIds.get(PdsPermissions.ROLE_SUPER_ADMIN));
             authz.bumpVersion();
         });
@@ -128,6 +136,32 @@ public class BootstrapRunner implements ApplicationRunner {
                 "SECURITY", true));
     }
 
+    /** 升级前已存在的权限点补齐节点 ID。 */
+    private void backfillNodeIds() {
+        for (com.pd.pds.server.entity.PermPoint p : pointMapper.selectList(new LambdaQueryWrapper<com.pd.pds.server.entity.PermPoint>()
+                .isNull(com.pd.pds.server.entity.PermPoint::getId))) {
+            p.setId(nodeTypes.newNodeId());
+            pointMapper.updateById(p);
+        }
+    }
+
+    /** 三员分立：系统管理员、安全管理员、审计管理员两两互斥（可在系统角色中查看）。 */
+    private void ensureSeparationMutex(Map<String, String> roleIds) {
+        List<String> ids = PdsPermissions.SEPARATED_ROLES.stream().map(roleIds::get).filter(java.util.Objects::nonNull).sorted().toList();
+        for (String a : ids) {
+            for (String b : ids) {
+                if (!a.equals(b) && mutexMapper.selectCount(new LambdaQueryWrapper<com.pd.pds.server.entity.RoleMutex>()
+                        .eq(com.pd.pds.server.entity.RoleMutex::getRoleId, a)
+                        .eq(com.pd.pds.server.entity.RoleMutex::getOtherRoleId, b)) == 0) {
+                    com.pd.pds.server.entity.RoleMutex m = new com.pd.pds.server.entity.RoleMutex();
+                    m.setRoleId(a);
+                    m.setOtherRoleId(b);
+                    mutexMapper.insert(m);
+                }
+            }
+        }
+    }
+
     private void ensureRootOrg() {
         if (orgMapper.selectById(OrgService.ROOT_ID) != null) {
             return;
@@ -160,6 +194,10 @@ public class BootstrapRunner implements ApplicationRunner {
                 r.setLevel("GROUP");
                 r.setDescription(def.description());
                 r.setBuiltin(true);
+                r.setType("BUILTIN");
+                r.setStatus(1);
+                r.setVersion(1);
+                r.setAppCode(PdsPermissions.APP);
                 r.setCreatedAt(now);
                 r.setUpdatedAt(now);
                 roleMapper.insert(r);

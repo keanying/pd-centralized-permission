@@ -249,4 +249,70 @@ class EffectivePermissionCalculatorTest {
         assertThat(pdk.permissionCodes()).containsExactly("pdk:doc:edit");
         assertThat(pdk.accessible(KB, ResourceAction.READ)).hasSize(4);
     }
+
+    // ------------------------------------------------------------------ V2：权限树与节点授权
+
+    /** pdk:ticket（业务域）→ pdk:ticket:kb（菜单）→ view / upload / download（高风险）。 */
+    private final Facts.PermTree tree = new Facts.PermTree(
+            Map.of("pdk:ticket:kb", "pdk:ticket",
+                    "pdk:ticket:kb:view", "pdk:ticket:kb",
+                    "pdk:ticket:kb:upload", "pdk:ticket:kb",
+                    "pdk:ticket:kb:download", "pdk:ticket:kb"),
+            Set.of("pdk:ticket:kb:download"),
+            Map.of("pdk:ticket", "票务业务域", "pdk:ticket:kb", "票务知识库"));
+
+    private Facts.Bundle treeBundle(List<Facts.PermGrant> grants, Set<String> disabled) {
+        return new Facts.Bundle(zhangsan, roles, List.of(), List.of(), resources, List.of(), List.of(), disabled, grants, tree);
+    }
+
+    private static Facts.PermGrant grant(String code, SubjectRef subject, Effect effect) {
+        return new Facts.PermGrant("g_" + code, code, subject, effect, null, Validity.ALWAYS, null);
+    }
+
+    @Test
+    void 授予父节点包含全部非高风险下级() {
+        EffectivePermissions eff = calculator.compute(treeBundle(List.of(
+                grant("pdk:ticket", SubjectRef.org("S_A", true), Effect.ALLOW)), Set.of()), NOW);
+        assertThat(eff.permissionCodes()).containsExactlyInAnyOrder(
+                "pdk:ticket", "pdk:ticket:kb", "pdk:ticket:kb:view", "pdk:ticket:kb:upload");
+        assertThat(eff.has("pdk:ticket:kb:download")).as("高风险节点须单独授予").isFalse();
+        SourceRef via = eff.explain("pdk:ticket:kb:view").allowRefs().get(0);
+        assertThat(via.kind()).isEqualTo(SourceRef.Kind.GRANT_ALLOW);
+        assertThat(via.viaNode()).isEqualTo("票务业务域");
+        assertThat(via.text()).contains("组织【景区A】（含下级）").contains("经上级节点【票务业务域】");
+    }
+
+    @Test
+    void 禁止父节点禁止全部下级含高风险() {
+        EffectivePermissions eff = calculator.compute(treeBundle(List.of(
+                grant("pdk:ticket:kb:download", SubjectRef.user("u_zs"), Effect.ALLOW),
+                grant("pdk:ticket:kb:view", SubjectRef.position("P_SELLER"), Effect.ALLOW),
+                grant("pdk:ticket:kb", SubjectRef.org("D_TICKET", false), Effect.DENY)), Set.of()), NOW);
+        assertThat(eff.permissionCodes()).isEmpty();
+        assertThat(eff.explain("pdk:ticket:kb:download").denyRefs()).extracting(SourceRef::kind)
+                .containsExactly(SourceRef.Kind.GRANT_DENY);
+    }
+
+    @Test
+    void 授予子节点时上级路径可见但不拥有() {
+        EffectivePermissions eff = calculator.compute(treeBundle(List.of(
+                grant("pdk:ticket:kb:upload", SubjectRef.group("GRP_KNOWLEDGE"), Effect.ALLOW)), Set.of()), NOW);
+        assertThat(eff.permissionCodes()).containsExactly("pdk:ticket:kb:upload");
+        assertThat(eff.visibleCodes()).containsExactly("pdk:ticket", "pdk:ticket:kb");
+        assertThat(eff.has("pdk:ticket:kb")).isFalse();
+    }
+
+    @Test
+    void 组织节点授权按向下继承匹配_草稿节点不生效() {
+        // 授予集团 G 但不向下继承：张三不在 G 本级，不匹配
+        EffectivePermissions none = calculator.compute(treeBundle(List.of(
+                grant("pdk:ticket:kb:view", SubjectRef.org("G", false), Effect.ALLOW)), Set.of()), NOW);
+        assertThat(none.permissionCodes()).isEmpty();
+        // 向下继承：匹配；但未发布（停用集合中）的节点不生效
+        EffectivePermissions eff = calculator.compute(treeBundle(List.of(
+                grant("pdk:ticket:kb", SubjectRef.org("G", true), Effect.ALLOW)), Set.of("pdk:ticket:kb:upload")), NOW);
+        assertThat(eff.permissionCodes()).containsExactlyInAnyOrder("pdk:ticket:kb", "pdk:ticket:kb:view");
+        assertThat(eff.explain("pdk:ticket:kb:upload").denyRefs()).extracting(SourceRef::kind)
+                .containsExactly(SourceRef.Kind.DISABLED);
+    }
 }

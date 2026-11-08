@@ -28,6 +28,7 @@ public final class EffectivePermissions {
     private final Map<String, List<SourceRef>> resourceDenySources;
     private final Set<String> scenicScope;
     private final int maxSecurityLevel;
+    private final Set<String> visibleCodes;
 
     EffectivePermissions(String userId, Instant computedAt,
                          Map<String, ResolvedScope> permissions,
@@ -37,7 +38,8 @@ public final class EffectivePermissions {
                          Map<String, List<SourceRef>> resourceAllowSources,
                          Map<String, List<SourceRef>> resourceDenySources,
                          Set<String> scenicScope,
-                         int maxSecurityLevel) {
+                         int maxSecurityLevel,
+                         Set<String> visibleCodes) {
         this.userId = userId;
         this.computedAt = computedAt;
         this.permissions = permissions;
@@ -48,6 +50,12 @@ public final class EffectivePermissions {
         this.resourceDenySources = resourceDenySources;
         this.scenicScope = scenicScope;
         this.maxSecurityLevel = maxSecurityLevel;
+        this.visibleCodes = visibleCodes == null ? Set.of() : Collections.unmodifiableSet(new TreeSet<>(visibleCodes));
+    }
+
+    /** 因下级节点被授予而"路径可见"的上级节点（如菜单、业务域），不等于拥有该节点权限。 */
+    public Set<String> visibleCodes() {
+        return visibleCodes;
     }
 
     public String userId() {
@@ -138,7 +146,13 @@ public final class EffectivePermissions {
                 res.put(type, copy);
             }
         });
+        Set<String> vis = new TreeSet<>();
+        visibleCodes.forEach(v -> {
+            if (v.startsWith(prefix)) {
+                vis.add(v);
+            }
+        });
         return new EffectivePermissions(userId, computedAt, perms, permAllowSources, permDenySources, res,
-                resourceAllowSources, resourceDenySources, scenicScope, maxSecurityLevel);
+                resourceAllowSources, resourceDenySources, scenicScope, maxSecurityLevel, vis);
     }
 }

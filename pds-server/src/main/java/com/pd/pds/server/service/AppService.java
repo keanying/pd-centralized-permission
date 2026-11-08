@@ -66,12 +66,14 @@ public class AppService {
     private final Guard guard;
     private final AuthzService authz;
     private final AuditService audit;
+    private final PermNodeTypeService nodeTypes;
 
     public AppService(AppInfoMapper appMapper, PermPointMapper pointMapper, ResourceTypeMapper typeMapper,
                       PermResourceMapper resourceMapper, ResourceGrantMapper grantMapper, UserPermMapper userPermMapper,
                       SysUserMapper userMapper, OrgUnitMapper orgMapper, PositionMapper positionMapper,
                       UserGroupMapper groupMapper, ClientService clientService, SubjectNames subjectNames, Guard guard,
-                      AuthzService authz, AuditService audit) {
+                      AuthzService authz, AuditService audit, PermNodeTypeService nodeTypes) {
+        this.nodeTypes = nodeTypes;
         this.subjectNames = subjectNames;
         this.appMapper = appMapper;
         this.pointMapper = pointMapper;
@@ -204,6 +206,7 @@ public class AppService {
             permissions.add(0, new AppDtos.ManifestPermission(accessCode, "登录进入" + m.name(), "MENU", "LOW",
                     "应用准入：单点登录进入该应用的前提"));
         }
+        int sort = 0;
         for (AppDtos.ManifestPermission p : permissions) {
             if (!p.code().startsWith(prefix)) {
                 throw new BizException(ErrorCode.VALIDATION_FAILED, "权限点编码必须以「" + prefix + "」开头：" + p.code());
@@ -211,19 +214,35 @@ public class AppService {
             if (!seen.add(p.code())) {
                 throw new BizException(ErrorCode.VALIDATION_FAILED, "权限点重复：" + p.code());
             }
+            nodeTypes.ensure(p.type());
+            sort += 10;
             PermPoint pp = existing.get(p.code());
             boolean isNew = pp == null;
             if (isNew) {
                 pp = new PermPoint();
                 pp.setCode(p.code());
+                pp.setId(nodeTypes.newNodeId());
                 pp.setAppCode(app);
+                pp.setSource("MANIFEST");
+                pp.setGrantable(true);
+                pp.setNeedMfa(false);
+                pp.setDataScopeEnabled(true);
+                pp.setCustomized(false);
+                pp.setSort(sort);
                 pp.setCreatedAt(now);
+                existing.put(p.code(), pp);
             }
-            pp.setName(p.name());
-            pp.setType(p.type());
-            pp.setRisk(p.risk() == null ? "LOW" : p.risk().toUpperCase());
-            pp.setDescription(p.description());
-            pp.setStatus(1);
+            // 后台改过的节点（customized），清单不再覆盖名称、类型、风险与状态
+            if (isNew || !Boolean.TRUE.equals(pp.getCustomized())) {
+                pp.setName(p.name());
+                pp.setType(p.type());
+                pp.setRisk(p.risk() == null ? "LOW" : p.risk().toUpperCase());
+                pp.setDescription(p.description());
+                pp.setStatus(1);
+                if (p.parent() != null && existing.containsKey(p.parent())) {
+                    pp.setParentId(existing.get(p.parent()).getId());
+                }
+            }
             pp.setManifestVersion(m.version());
             pp.setUpdatedAt(now);
             if (isNew) {
@@ -236,7 +255,9 @@ public class AppService {
         }
         int disabled = 0;
         for (PermPoint old : existing.values()) {
-            if (!seen.contains(old.getCode()) && old.getStatus() == 1) {
+            // 只停用来自清单、且未在后台改过的节点；后台维护的节点不受清单影响
+            if (!seen.contains(old.getCode()) && old.getStatus() == 1 && "MANIFEST".equals(old.getSource())
+                    && !Boolean.TRUE.equals(old.getCustomized())) {
                 old.setStatus(0);
                 old.setUpdatedAt(now);
                 pointMapper.updateById(old);
@@ -262,6 +283,21 @@ public class AppService {
         }
         authz.bumpVersion();
         return new AppDtos.ManifestResult(app, m.version(), added, updated, disabled);
+    }
+
+    /** 在权限树中新增应用（自动生成应用准入节点），之后可在权限树中维护节点。 */
+    @Transactional
+    public AppDtos.ManifestResult createApp(com.pd.pds.server.web.dto.PermTreeDtos.CreateApp req) {
+        guard.require(PdsPermissions.APP_MANAGE);
+        if (appMapper.selectById(req.code()) != null) {
+            throw BizException.duplicate("应用编码【" + req.code() + "】");
+        }
+        AppDtos.ManifestResult r = applyManifest(req.code(), new AppDtos.Manifest(req.name(), req.description(), "manual",
+                List.of(), List.of(), req.category(), req.accessControl()));
+        CurrentActor a = guard.actor();
+        audit.record(AuditService.Entry.of("ADMIN_CHANGE", "新增应用", "SUCCESS")
+                .actor(a.auditId(), a.userName(), a.ip()).target("app", req.code()).detail(Map.of("name", req.name())));
+        return r;
     }
 
     /** 应用准入权限点：{app}:access（PDS 自身为 pds:console:access）。 */
@@ -389,6 +425,34 @@ public class AppService {
         grantMapper.deleteById(grantId);
         authz.bumpVersion();
         auditAdmin("撤销资源授权", type + ":" + refId, Map.of("grantId", grantId));
+    }
+
+    /** 修改资源授权的有效期 / 原因。 */
+    @Transactional
+    public void updateGrantValidity(String grantId, Instant validTo, boolean clear, String reason) {
+        ResourceGrant g = grantMapper.selectById(grantId);
+        if (g == null) {
+            throw BizException.notFound("授权记录");
+        }
+        PermResource r = resourceMapper.selectById(g.getResourceId());
+        requireGrantOperator(r, ResourceAction.of(g.getAction()));
+        com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<ResourceGrant> w =
+                new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<ResourceGrant>().eq(ResourceGrant::getId, grantId);
+        if (clear) {
+            w.set(ResourceGrant::getValidTo, null);
+        } else if (validTo != null) {
+            if (!validTo.isAfter(Instant.now())) {
+                throw new BizException(ErrorCode.VALIDATION_FAILED, "有效期必须晚于当前时间");
+            }
+            w.set(ResourceGrant::getValidTo, validTo);
+        }
+        if (reason != null && !reason.isBlank()) {
+            w.set(ResourceGrant::getReason, reason);
+        }
+        grantMapper.update(null, w);
+        authz.bumpVersion();
+        auditAdmin("修改资源授权有效期", r.getTypeCode() + ":" + r.getRefId(), Map.of("grantId", grantId,
+                "validTo", clear ? "长期" : String.valueOf(validTo)));
     }
 
     /** @return 操作人是否拥有 pds:grant:any */

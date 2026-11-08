@@ -43,6 +43,8 @@ public final class EffectivePermissionCalculator {
         Map<String, List<SourceRef>> permAllow = new HashMap<>();
         Map<String, List<SourceRef>> permDeny = new HashMap<>();
 
+        Facts.PermTree tree = facts.tree();
+
         // 1. 角色来源
         for (Facts.RoleBinding binding : facts.bindings()) {
             if (!binding.validity().isActive(now) || !user.matches(binding.subject())) {
@@ -56,31 +58,61 @@ public final class EffectivePermissionCalculator {
                     user.nameOf(binding.subject()), binding.subject().includeChildren(), null, binding.validity().to(),
                     "角色【" + role.name() + "】经 " + user.label(binding.subject()) + " 授予");
             for (Facts.RolePermission rp : role.permissions()) {
-                grantPerm(perms, permAllow, rp.permCode(), rp.scope(), source, user);
+                grantTree(perms, permAllow, tree, rp.permCode(), rp.scope(), source, user);
             }
         }
 
-        // 2. 人员明细（功能权限点）
+        // 2. 权限节点授权（人员 / 组织 / 岗位 / 用户组）
+        for (Facts.PermGrant g : facts.permGrants()) {
+            if (!g.validity().isActive(now) || !user.matches(g.subject())) {
+                continue;
+            }
+            String reason = g.reason() == null || g.reason().isBlank() ? "" : "（原因：" + g.reason() + "）";
+            boolean personal = g.subject().type() == SubjectType.USER;
+            boolean allow = g.effect() == Effect.ALLOW;
+            SourceRef.Kind kind = personal ? (allow ? SourceRef.Kind.DIRECT_ALLOW : SourceRef.Kind.DIRECT_DENY)
+                    : (allow ? SourceRef.Kind.GRANT_ALLOW : SourceRef.Kind.GRANT_DENY);
+            String text = personal ? (allow ? "人员明细直接授予" : "人员明细禁止") + reason
+                    : user.label(g.subject()) + (allow ? " 直接授予" : " 禁止") + reason;
+            SourceRef ref = new SourceRef(kind, null, g.subject().type(), user.nameOf(g.subject()),
+                    g.subject().includeChildren(), g.reason(), g.validity().to(), text);
+            if (allow) {
+                grantTree(perms, permAllow, tree, g.permCode(), g.scope(), ref, user);
+            } else {
+                denyTree(permDeny, tree, g.permCode(), ref);
+            }
+        }
+
+        // 3. 人员明细（功能权限点，兼容旧数据）
         for (Facts.UserPermission up : facts.userPermissions()) {
             if (up.permCode() == null || up.resource() != null || !up.validity().isActive(now)) {
                 continue;
             }
             String reason = up.reason() == null || up.reason().isBlank() ? "" : "（原因：" + up.reason() + "）";
             if (up.effect() == Effect.ALLOW) {
-                grantPerm(perms, permAllow, up.permCode(), up.scope(), direct(SourceRef.Kind.DIRECT_ALLOW, up, user,
+                grantTree(perms, permAllow, tree, up.permCode(), up.scope(), direct(SourceRef.Kind.DIRECT_ALLOW, up, user,
                         "人员明细直接授予" + reason), user);
             } else {
-                permDeny.computeIfAbsent(up.permCode(), k -> new ArrayList<>())
-                        .add(direct(SourceRef.Kind.DIRECT_DENY, up, user, "人员明细禁止" + reason));
+                denyTree(permDeny, tree, up.permCode(), direct(SourceRef.Kind.DIRECT_DENY, up, user, "人员明细禁止" + reason));
             }
         }
 
-        // 3. 禁止优先 + 停用的权限点
+        // 禁止优先 + 停用（或未发布）的权限点
         permDeny.keySet().forEach(perms::remove);
         for (String disabled : facts.disabledPermCodes()) {
             if (perms.remove(disabled) != null) {
                 permDeny.computeIfAbsent(disabled, k -> new ArrayList<>())
-                        .add(new SourceRef(SourceRef.Kind.DISABLED, null, null, null, false, null, null, "权限点已停用"));
+                        .add(new SourceRef(SourceRef.Kind.DISABLED, null, null, null, false, null, null, "权限点已停用或尚未发布"));
+            }
+        }
+
+        // 祖先路径可见：授予子节点时，其上级节点（菜单、域等）对此人可见，但不等于拥有
+        Set<String> visible = new TreeSet<>();
+        for (String code : perms.keySet()) {
+            for (String a : tree.ancestors(code)) {
+                if (!perms.containsKey(a) && !facts.disabledPermCodes().contains(a)) {
+                    visible.add(a);
+                }
             }
         }
 
@@ -144,7 +176,7 @@ public final class EffectivePermissionCalculator {
         }
 
         return new EffectivePermissions(user.userId(), now, perms, freeze(permAllow), freeze(permDeny),
-                resources, freeze(resAllow), freeze(resDeny), scenicScope, level);
+                resources, freeze(resAllow), freeze(resDeny), scenicScope, level, visible);
     }
 
     private static boolean inScenicScope(String scenicId, Set<String> scope) {
@@ -153,6 +185,33 @@ public final class EffectivePermissionCalculator {
 
     private static SourceRef direct(SourceRef.Kind kind, Facts.UserPermission up, UserProfile user, String text) {
         return new SourceRef(kind, null, SubjectType.USER, user.name(), false, up.reason(), up.validity().to(), text);
+    }
+
+    /** 授予节点及其全部非高风险下级。 */
+    private static void grantTree(Map<String, ResolvedScope> perms, Map<String, List<SourceRef>> sources, Facts.PermTree tree,
+                                  String code, DataScope scope, SourceRef source, UserProfile user) {
+        grantPerm(perms, sources, code, scope, source, user);
+        if (tree.isEmpty()) {
+            return;
+        }
+        String via = tree.nameOf(code);
+        for (String d : tree.descendants(code)) {
+            if (!tree.isHighRisk(d)) {
+                grantPerm(perms, sources, d, scope, source.via(via), user);
+            }
+        }
+    }
+
+    /** 禁止节点及其全部下级（含高风险）。 */
+    private static void denyTree(Map<String, List<SourceRef>> denies, Facts.PermTree tree, String code, SourceRef source) {
+        denies.computeIfAbsent(code, k -> new ArrayList<>()).add(source);
+        if (tree.isEmpty()) {
+            return;
+        }
+        String via = tree.nameOf(code);
+        for (String d : tree.descendants(code)) {
+            denies.computeIfAbsent(d, k -> new ArrayList<>()).add(source.via(via));
+        }
     }
 
     private static void grantPerm(Map<String, ResolvedScope> perms, Map<String, List<SourceRef>> sources,

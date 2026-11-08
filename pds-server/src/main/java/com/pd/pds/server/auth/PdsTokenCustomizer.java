@@ -41,6 +41,10 @@ public class PdsTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingCont
     private final AuthzService authz;
     private final AuditService audit;
     private final PdsProperties props;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pd.pds.server.service.RoleClaims roleClaims;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pd.pds.server.service.DistributionService distribution;
 
     public PdsTokenCustomizer(SysUserMapper userMapper, com.pd.pds.server.mapper.AppInfoMapper appMapper,
                               AuthzService authz, AuditService audit, PdsProperties props) {
@@ -117,6 +121,18 @@ public class PdsTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingCont
             claims.claim("scenic_scope", new java.util.ArrayList<>(profile.scenicScope()));
         }
         claims.claim("authz_ver", Math.toIntExact(authz.version())); // 用 int：授权记录反序列化只接受 JSON 自然类型
+
+        // 角色下发（令牌声明）：只放与本客户端所属应用相关的角色，应用可在"下发方式"中关闭
+        boolean exchangeGrant = AuthorizationGrantType.TOKEN_EXCHANGE.equals(context.getAuthorizationGrantType());
+        if (accessToken && !exchangeGrant) {
+            String app = roleClaims.appOfClient(context.getRegisteredClient().getClientId());
+            if (app != null && distribution.tokenClaimEnabled(app)) {
+                java.util.List<String> roles = roleClaims.rolesFor(u.getId(), app);
+                if (!roles.isEmpty()) {
+                    claims.claim("roles", roles);
+                }
+            }
+        }
 
         boolean exchange = AuthorizationGrantType.TOKEN_EXCHANGE.equals(context.getAuthorizationGrantType());
         if (accessToken && exchange) {

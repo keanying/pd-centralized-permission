@@ -13,9 +13,16 @@ public final class AppDtos {
     private AppDtos() {
     }
 
+    /**
+     * 清单中的权限节点。type 为权限树节点类型编码（不存在时自动新增该类型）；parent 为可选的父节点编码。
+     */
     public record ManifestPermission(@NotBlank String code, @NotBlank String name,
-                                     @NotBlank @Pattern(regexp = "MENU|BUTTON|API|FUNCTION|DATA|AI_TOOL|AI_MODEL|AI_SKILL") String type,
-                                     String risk, String description) {
+                                     @NotBlank @Pattern(regexp = "[A-Z][A-Z0-9_]{1,31}", message = "节点类型编码只能为大写字母、数字和下划线") String type,
+                                     String risk, String description, String parent) {
+
+        public ManifestPermission(String code, String name, String type, String risk, String description) {
+            this(code, name, type, risk, description, null);
+        }
     }
 
     public record ManifestResourceType(@NotBlank String type, @NotBlank String name, List<String> actions) {

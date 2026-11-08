@@ -122,6 +122,13 @@ public class AuditService {
         return new PageResult<>(p.getTotal(), page, size, p.getRecords());
     }
 
+    /** 某对象的变更记录（按时间倒序）。 */
+    public List<AuditEvent> byTarget(String targetType, String targetId, int limit) {
+        return mapper.selectList(new LambdaQueryWrapper<AuditEvent>()
+                .eq(AuditEvent::getTargetType, targetType).like(AuditEvent::getTargetIds, targetId)
+                .orderByDesc(AuditEvent::getSeq).last("LIMIT " + Math.max(1, Math.min(limit, 200))));
+    }
+
     public record VerifyResult(boolean intact, long checked, Long firstBrokenSeq, String message) {
     }
 

@@ -20,6 +20,21 @@ public class PermPoint {
     private String description;
     private Integer status;
     private String manifestVersion;
+    /** 节点 ID（系统生成，不可变） */
+    private String id;
+    private String parentId;
+    private Integer sort;
+    private Integer securityLevel;
+    private Boolean grantable;
+    private Boolean needMfa;
+    private Boolean dataScopeEnabled;
+    /** MANIFEST（应用清单）/ MANUAL（后台维护） */
+    private String source;
+    /** 后台修改过（应用再次提交清单时不覆盖名称、风险等） */
+    private Boolean customized;
+    /** 已发布节点的待发布修改（JSON） */
+    private String pending;
+    private String createdBy;
     private Instant createdAt;
     private Instant updatedAt;
 }

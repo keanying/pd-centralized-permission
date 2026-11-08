@@ -28,6 +28,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -398,6 +399,130 @@ class PdsIntegrationTest {
         // 运行时配置（随 PDS 发布的管理后台）
         String cfg = mvc.perform(get("/console/config.js")).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertThat(cfg).contains("window.__PDS_CONFIG__").contains("\"clientId\":\"pds-console\"");
+    }
+
+    @Autowired
+    private com.pd.pds.server.service.DistributionService distribution;
+
+    @Test
+    @Order(50)
+    void V2_权限树_节点授权与继承阻断_分配库_系统角色下发_权限图谱() throws Exception {
+        // 节点类型：可新增（没有不可删除的内置类型）
+        api(post("/api/v1/perm-node-types"), adminToken, "{\"code\":\"REPORT\",\"name\":\"报表\",\"grantable\":true}");
+        String types = api(get("/api/v1/perm-node-types"), adminToken).getContentAsString();
+        assertThat((List<String>) JsonPath.read(types, "$.data[*].code")).contains("REPORT", "DOMAIN", "BUTTON");
+        api(delete("/api/v1/perm-node-types/REPORT"), adminToken);
+        assertThat(raw(delete("/api/v1/perm-node-types/FUNCTION"), adminToken, null).getStatus()).as("类型在用不能删").isEqualTo(409);
+
+        // 权限树：新增节点进入草稿，ID 自动生成，编码按父节点拼接
+        String domain = api(post("/api/v1/perm-nodes"), adminToken,
+                "{\"appCode\":\"pdk\",\"type\":\"DOMAIN\",\"name\":\"票务业务域\",\"segment\":\"ticket\"}").getContentAsString();
+        String domainId = JsonPath.read(domain, "$.data.id");
+        assertThat(domainId).startsWith("pn_");
+        assertThat((String) JsonPath.read(domain, "$.data.code")).isEqualTo("pdk:ticket");
+        assertThat((String) JsonPath.read(domain, "$.data.draft")).isEqualTo("NEW");
+        api(post("/api/v1/perm-nodes"), adminToken,
+                "{\"appCode\":\"pdk\",\"parentId\":\"" + domainId + "\",\"type\":\"BUTTON\",\"name\":\"上传文档\",\"segment\":\"upload\"}");
+        String dl = api(post("/api/v1/perm-nodes"), adminToken,
+                "{\"appCode\":\"pdk\",\"parentId\":\"" + domainId + "\",\"type\":\"BUTTON\",\"name\":\"下载原文\",\"segment\":\"download\",\"risk\":\"HIGH\"}")
+                .getContentAsString();
+        String dlId = JsonPath.read(dl, "$.data.id");
+        // 草稿节点不能授权
+        String grantDomain = """
+                {"subjects":[{"type":"ORG","id":"%s","includeChildren":true}],
+                 "objects":[{"type":"PERM","code":"pdk:ticket"}],"effect":"ALLOW","reason":"票务域开放"}""".formatted(scenicA);
+        assertThat(raw(post("/api/v1/assignments/batch"), adminToken, grantDomain).getStatus()).isEqualTo(409);
+        // 草稿可改编码（连同下级）
+        api(put("/api/v1/perm-nodes/" + domainId), adminToken, "{\"code\":\"pdk:tk\"}");
+        api(put("/api/v1/perm-nodes/" + domainId), adminToken, "{\"code\":\"pdk:ticket\"}");
+        String diff = api(get("/api/v1/perm-tree/pdk/diff"), adminToken).getContentAsString();
+        assertThat((List<String>) JsonPath.read(diff, "$.data[*].code")).containsExactlyInAnyOrder("pdk:ticket", "pdk:ticket:upload", "pdk:ticket:download");
+        String published = api(post("/api/v1/perm-tree/pdk/publish"), adminToken, "{}").getContentAsString();
+        assertThat((String) JsonPath.read(published, "$.data.version")).startsWith("v").endsWith(".1");
+        assertThat(raw(put("/api/v1/perm-nodes/" + domainId), adminToken, "{\"code\":\"pdk:x\"}").getStatus()).as("发布后编码锁定").isEqualTo(409);
+
+        // 影响分析 + 组织节点授权（景区A，向下继承）：父含子，高风险除外
+        String impact = api(post("/api/v1/assignments/impact"), adminToken, grantDomain).getContentAsString();
+        assertThat((Integer) JsonPath.read(impact, "$.data.affectedUsers")).isGreaterThanOrEqualTo(1);
+        assertThat((Integer) JsonPath.read(impact, "$.data.highRiskCount")).isZero();
+        api(post("/api/v1/assignments/batch"), adminToken, grantDomain);
+        String eff = api(get("/api/v1/users/" + zhangsanId + "/effective?app=pdk"), adminToken).getContentAsString();
+        assertThat((List<String>) JsonPath.read(eff, "$.data.permissions[?(@.code=='pdk:ticket:upload')].state")).containsExactly("GRANTED");
+        assertThat((List<String>) JsonPath.read(eff, "$.data.permissions[?(@.code=='pdk:ticket:download')].state")).containsExactly("NONE");
+        String nodeGrants = api(get("/api/v1/orgs/" + deptTicket + "/grants"), adminToken).getContentAsString();
+        assertThat((List<String>) JsonPath.read(nodeGrants, "$.data[?(@.inherited==true)].fromOrgName")).contains("景区A");
+
+        // 阻断继承：票务部不再继承景区A的节点权限
+        api(put("/api/v1/orgs/" + deptTicket + "/inherit"), adminToken, "{\"inherit\":false}");
+        eff = api(get("/api/v1/users/" + zhangsanId + "/effective?app=pdk"), adminToken).getContentAsString();
+        assertThat((List<String>) JsonPath.read(eff, "$.data.permissions[?(@.code=='pdk:ticket:upload')].state")).containsExactly("NONE");
+        api(put("/api/v1/orgs/" + deptTicket + "/inherit"), adminToken, "{\"inherit\":true}");
+
+        // 已发布节点的修改进入待发布；撤销后无差异
+        api(put("/api/v1/perm-nodes/" + dlId), adminToken, "{\"name\":\"下载原文件\"}");
+        diff = api(get("/api/v1/perm-tree/pdk/diff"), adminToken).getContentAsString();
+        assertThat((List<String>) JsonPath.read(diff, "$.data[*].kind")).containsExactly("MODIFY");
+        api(post("/api/v1/perm-nodes/" + dlId + "/discard"), adminToken);
+        assertThat((List<Object>) JsonPath.read(api(get("/api/v1/perm-tree/pdk/diff"), adminToken).getContentAsString(), "$.data")).isEmpty();
+        // 被授权引用的节点不能删除
+        String domainUsed = raw(delete("/api/v1/perm-nodes/" + domainId), adminToken, null).getContentAsString();
+        assertThat(domainUsed).contains("下级节点");
+
+        // 分配库：按应用查看、统计、按权限查看
+        String rows = api(get("/api/v1/assignments?app=pdk&pageSize=100"), adminToken).getContentAsString();
+        assertThat((List<String>) JsonPath.read(rows, "$.data.items[*].objectCode")).contains("pdk:ticket");
+        String byPerm = api(get("/api/v1/assignments?permCode=pdk:ticket:upload"), adminToken).getContentAsString();
+        assertThat((List<String>) JsonPath.read(byPerm, "$.data.items[*].subjectName")).contains("景区A");
+        String stats = api(get("/api/v1/assignments/stats?app=pdk"), adminToken).getContentAsString();
+        assertThat((Integer) JsonPath.read(stats, "$.data.records")).isGreaterThanOrEqualTo(1);
+
+        // 系统角色：应用角色、继承、互斥、外部编码、下发
+        String role = api(post("/api/v1/roles"), adminToken, """
+                {"name":"PDK 知识读者","type":"APP","appCode":"pdk"}""").getContentAsString();
+        String roleId = JsonPath.read(role, "$.data.id");
+        assertThat((String) JsonPath.read(role, "$.data.code")).startsWith("APP_");
+        api(put("/api/v1/roles/" + roleId + "/permissions"), adminToken, "{\"permissions\":[{\"permCode\":\"pdk:kb:view\"}]}");
+        String roles = api(get("/api/v1/roles"), adminToken).getContentAsString();
+        String auditor = ((List<String>) JsonPath.read(roles, "$.data[?(@.code=='PDS_AUDIT_ADMIN')].id")).get(0);
+        api(put("/api/v1/roles/" + roleId + "/mutex"), adminToken, "{\"roleIds\":[\"" + auditor + "\"]}");
+        api(put("/api/v1/roles/" + roleId + "/mappings"), adminToken, "{\"mappings\":[{\"appCode\":\"pdk\",\"externalCode\":\"ext_pdk_reader\"}]}");
+        api(put("/api/v1/dist/subscriptions/pdk"), adminToken, "{\"webhook\":true,\"webhookUrl\":\"http://127.0.0.1:9/pds-hook\"}");
+        api(post("/api/v1/roles/" + roleId + "/bindings"), adminToken, "{\"subjectType\":\"USER\",\"subjectId\":\"" + zhangsanId + "\"}");
+        MockHttpServletResponse mutex = raw(post("/api/v1/roles/" + auditor + "/bindings"), adminToken,
+                "{\"subjectType\":\"USER\",\"subjectId\":\"" + zhangsanId + "\"}");
+        assertThat(mutex.getStatus()).isEqualTo(403);
+        String pdk = clientToken("pdk-service", "pdk-service-secret", "pds.authz");
+        String snap = api(get("/api/v1/authz/snapshot?app=pdk&subject=" + zhangsanId), pdk).getContentAsString();
+        assertThat((List<String>) JsonPath.read(snap, "$.data.roles")).contains("ext_pdk_reader");
+        distribution.dispatchDue();
+        String dist = api(get("/api/v1/roles/" + roleId + "/distribution"), adminToken).getContentAsString();
+        assertThat((List<String>) JsonPath.read(dist, "$.data[?(@.appCode=='pdk')].status")).containsAnyOf("RETRYING", "FAILED");
+        assertThat((List<String>) JsonPath.read(dist, "$.data[?(@.appCode=='pdk')].externalCode")).containsExactly("ext_pdk_reader");
+        String versions = api(get("/api/v1/roles/" + roleId + "/versions"), adminToken).getContentAsString();
+        assertThat((List<Object>) JsonPath.read(versions, "$.data")).hasSize(1);
+        String members = api(get("/api/v1/roles/" + roleId + "/members"), adminToken).getContentAsString();
+        assertThat((List<String>) JsonPath.read(members, "$.data[*].name")).containsExactly("张三");
+
+        // 权限图谱与路径解释
+        String graph = api(get("/api/v1/graph/user/" + zhangsanId + "?app=pdk"), adminToken).getContentAsString();
+        assertThat((List<String>) JsonPath.read(graph, "$.data.nodes[*].id")).contains("PERM:pdk:ticket:upload", "ROLE:" + roleId);
+        String explain = api(get("/api/v1/graph/explain?userId=" + zhangsanId + "&code=pdk:ticket:upload"), adminToken).getContentAsString();
+        assertThat((String) JsonPath.read(explain, "$.data.verdict")).isEqualTo("ALLOW");
+        assertThat((List<String>) JsonPath.read(explain, "$.data.allow[0].steps")).anyMatch(s -> s.contains("景区A"));
+        api(get("/api/v1/graph/overview"), adminToken);
+        api(get("/api/v1/graph/perm?code=pdk:ticket:upload"), adminToken);
+
+        // 加人预览：把管理员以兼职加入票务部，会新增票务域权限
+        String adminId = JsonPath.read(api(get("/api/v1/me"), adminToken).getContentAsString(), "$.data.id");
+        String preview = api(post("/api/v1/orgs/" + deptTicket + "/members/preview"), adminToken,
+                "{\"userIds\":[\"" + adminId + "\"],\"primary\":false}").getContentAsString();
+        assertThat((List<String>) JsonPath.read(preview, "$.data.addedNames")).contains("上传文档");
+
+        // 撤销分配库记录
+        String rowId = ((List<String>) JsonPath.read(rows, "$.data.items[?(@.objectCode=='pdk:ticket')].id")).get(0);
+        api(post("/api/v1/assignments/revoke"), adminToken, "{\"ids\":[\"" + rowId + "\"]}");
+        eff = api(get("/api/v1/users/" + zhangsanId + "/effective?app=pdk"), adminToken).getContentAsString();
+        assertThat((List<String>) JsonPath.read(eff, "$.data.permissions[?(@.code=='pdk:ticket:upload')].state")).containsExactly("NONE");
     }
 
     // ------------------------------------------------------------------ 工具方法

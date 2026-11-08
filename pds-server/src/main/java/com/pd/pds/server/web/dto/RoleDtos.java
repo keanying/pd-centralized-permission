@@ -16,8 +16,50 @@ public final class RoleDtos {
     private RoleDtos() {
     }
 
-    public record CreateRole(@NotBlank String code, @NotBlank String name,
-                             @Pattern(regexp = "GROUP|SCENIC") String level, String scenicId, String description) {
+    /**
+     * 新建角色。code 为空时自动生成；type：GLOBAL（全局）/ APP（应用角色，须指定 appCode）/ SCENIC（景区角色，须指定 scenicId）。
+     * level 为兼容旧接口保留（SCENIC 等同 type=SCENIC）。
+     */
+    public record CreateRole(@Pattern(regexp = "^$|[A-Za-z][A-Za-z0-9_]{1,63}", message = "角色编码只能为字母开头的字母数字下划线") String code,
+                             @NotBlank String name,
+                             @Pattern(regexp = "GROUP|SCENIC") String level, String scenicId, String description,
+                             @Pattern(regexp = "GLOBAL|APP|SCENIC") String type, String appCode, String parentRoleId,
+                             String ownerId) {
+
+        public CreateRole(String code, String name, String level, String scenicId, String description) {
+            this(code, name, level, scenicId, description, null, null, null, null);
+        }
+    }
+
+    public record UpdateRole(String name, String description, String ownerId, String parentRoleId, Boolean clearParent,
+                             Integer status) {
+    }
+
+    public record CopyRole(String code, @NotBlank String name) {
+    }
+
+    public record Mapping(@NotBlank String appCode, @NotBlank String externalCode) {
+    }
+
+    public record SetMappings(@NotNull List<@Valid Mapping> mappings) {
+    }
+
+    public record MappingView(String appCode, String appName, String externalCode) {
+    }
+
+    public record SetMutex(@NotNull List<String> roleIds) {
+    }
+
+    public record RoleVersionView(String id, int version, String summary, int permCount, String createdBy, Instant createdAt) {
+    }
+
+    public record MemberView(String userId, String name, String empNo, String deptName, List<String> via) {
+    }
+
+    /** 角色在某目标应用上的下发情况（最近一次投递）。 */
+    public record DistributionRow(String appCode, String appName, String externalCode, String lastEvent, String lastEventLabel,
+                                  String deliveryId, String status, Integer attempts, String lastError, Integer latencyMs,
+                                  Instant time, boolean webhook) {
     }
 
     public record RolePermission(@NotBlank String permCode,
@@ -43,7 +85,11 @@ public final class RoleDtos {
     }
 
     public record RoleView(String id, String code, String name, String level, String scenicId, String description,
-                           boolean builtin, List<RolePermission> permissions, long bindingCount) {
+                           boolean builtin, List<RolePermission> permissions, long bindingCount,
+                           String type, String appCode, String appName, String parentRoleId, String parentName,
+                           List<String> parentChain, int status, String ownerId, String ownerName, int version,
+                           long memberCount, List<String> mutexRoleIds, List<String> mutexNames, String scenicName,
+                           List<String> inheritedPerms) {
     }
 
     /** 人员明细权限：permCode 与 resourceType+resourceId 二选一。 */

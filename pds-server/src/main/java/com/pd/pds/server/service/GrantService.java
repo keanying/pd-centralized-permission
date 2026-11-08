@@ -62,6 +62,8 @@ public class GrantService {
     private final Guard guard;
     private final AuthzService authz;
     private final AuditService audit;
+    @org.springframework.beans.factory.annotation.Autowired
+    private PermGrantService permGrants;
 
     public GrantService(UserPermMapper userPermMapper, PermPointMapper pointMapper, PermResourceMapper resourceMapper,
                         ResourceTypeMapper typeMapper, UserScenicMapper userScenicMapper, SecurityLevelSettingMapper levelMapper,
@@ -153,7 +155,9 @@ public class GrantService {
             guard.require(PdsPermissions.GRANT_MANAGE);
         }
         assertManageable(authz.requireUser(userId), guard.has(PdsPermissions.GRANT_MANAGE) ? PdsPermissions.GRANT_MANAGE : PdsPermissions.AUTHZ_QUERY);
-        return userPermMapper.selectList(new LambdaQueryWrapper<UserPerm>().eq(UserPerm::getUserId, userId)
+        List<RoleDtos.UserPermView> nodeGrants = permGrants.listForUser(userId);
+        List<RoleDtos.UserPermView> out = new ArrayList<>(nodeGrants);
+        out.addAll(userPermMapper.selectList(new LambdaQueryWrapper<UserPerm>().eq(UserPerm::getUserId, userId)
                         .orderByDesc(UserPerm::getCreatedAt)).stream()
                 .map(up -> {
                     PermResource r = up.getResourceId() == null ? null : resourceMapper.selectById(up.getResourceId());
@@ -163,7 +167,9 @@ public class GrantService {
                             up.getAction(), up.getEffect(), up.getDataScope(), up.getScopeValues(), up.getValidFrom(),
                             up.getValidTo(), up.getReason(), subjectNames.userName(up.getGrantedBy()), up.getCreatedAt());
                 })
-                .toList();
+                .toList());
+        out.sort(java.util.Comparator.comparing(RoleDtos.UserPermView::createdAt, java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())));
+        return out;
     }
 
     // ------------------------------------------------------------------ 直接授予 / 禁止
@@ -195,16 +201,12 @@ public class GrantService {
         up.setCreatedAt(Instant.now());
         String target;
         if (byPerm) {
-            if (pointMapper.selectById(req.permCode()) == null) {
-                throw BizException.notFound("权限点【" + req.permCode() + "】");
-            }
-            if (allow && !any && !mine.has(req.permCode())) {
-                throw new BizException(ErrorCode.GRANT_EXCEEDS_OWN, "授予的权限超出了您自身拥有的权限：" + req.permCode());
-            }
-            up.setPermCode(req.permCode());
-            up.setDataScope(req.dataScope());
-            up.setScopeValues(req.scopeValues() == null || req.scopeValues().isEmpty() ? null : String.join(",", new TreeSet<>(req.scopeValues())));
-            target = req.permCode();
+            com.pd.pds.server.entity.AuthGrant g = permGrants.create(new PermGrantService.Spec("USER", userId, false,
+                    req.permCode(), req.effect(), req.dataScope(), req.scopeValues() == null ? null : new java.util.HashSet<>(req.scopeValues()),
+                    req.validFrom(), req.validTo(), req.reason(), "MANUAL"));
+            up.setId(g.getId());
+            up.setPermCode(g.getPermCode());
+            return up;
         } else {
             if (req.action() == null) {
                 throw new BizException(ErrorCode.VALIDATION_FAILED, "资源授权必须指定动作 READ/WRITE/ADMIN");
@@ -233,6 +235,11 @@ public class GrantService {
     public void updateUserPerm(String userId, String permId, RoleDtos.UpdateUserPerm req) {
         guard.require(PdsPermissions.GRANT_MANAGE);
         assertManageable(authz.requireUser(userId), PdsPermissions.GRANT_MANAGE);
+        com.pd.pds.server.entity.AuthGrant ag = permGrants.findForUser(userId, permId);
+        if (ag != null) {
+            permGrants.updateValidity(permId, req.validTo(), Boolean.TRUE.equals(req.clearValidTo()), req.reason());
+            return;
+        }
         UserPerm up = userPermMapper.selectById(permId);
         if (up == null || !up.getUserId().equals(userId)) {
             throw BizException.notFound("人员明细权限");
@@ -260,6 +267,10 @@ public class GrantService {
     public void deleteUserPerm(String userId, String permId) {
         guard.require(PdsPermissions.GRANT_MANAGE);
         assertManageable(authz.requireUser(userId), PdsPermissions.GRANT_MANAGE);
+        if (permGrants.findForUser(userId, permId) != null) {
+            permGrants.delete(permId);
+            return;
+        }
         UserPerm up = userPermMapper.selectById(permId);
         if (up == null || !up.getUserId().equals(userId)) {
             throw BizException.notFound("人员明细权限");

@@ -19,6 +19,13 @@ public class Role {
     private String scenicId;
     private String description;
     private Boolean builtin;
+    /** BUILTIN / GLOBAL / APP / SCENIC */
+    private String type;
+    private String appCode;
+    private String parentRoleId;
+    private Integer status;
+    private String ownerId;
+    private Integer version;
     private Instant createdAt;
     private Instant updatedAt;
 }

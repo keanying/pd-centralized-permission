@@ -25,4 +25,13 @@ public final class Ids {
         }
         return prefix + "_" + new String(buf);
     }
+
+    /** 短 ID：前缀 + 指定长度的随机串，例如权限节点 pn_8F3K2Q7M。调用方负责唯一性校验。 */
+    public static String shortId(String prefix, int length) {
+        char[] buf = new char[length];
+        for (int i = 0; i < length; i++) {
+            buf[i] = ALPHABET[RANDOM.nextInt(32)];
+        }
+        return prefix + "_" + new String(buf);
+    }
 }

@@ -32,6 +32,9 @@ import java.util.TreeMap;
 @Service
 public class AuthzApiService {
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private RoleClaims roleClaims;
+
     public static final String SCOPE_AUTHZ = "pds.authz";
     public static final String SCOPE_AUTHZ_ALL = "pds.authz.all";
     private static final int SNAPSHOT_TTL_SECONDS = 300;
@@ -90,7 +93,7 @@ public class AuthzApiService {
         return new AuthzDtos.Snapshot(authz.version(), app,
                 new AuthzDtos.SnapshotUser(u.getId(), u.getName(), u.getScenicId(), u.getPrimaryOrgId()),
                 eff.permissionCodes(), scopes, eff.scenicScope(), resources, eff.maxSecurityLevel(),
-                List.of(), SNAPSHOT_TTL_SECONDS);
+                List.of(), SNAPSHOT_TTL_SECONDS, roleClaims.rolesFor(u.getId(), app), eff.visibleCodes());
     }
 
     public AuthzDtos.CheckResult explain(String subject, AuthzDtos.CheckItem item) {

@@ -22,6 +22,8 @@ public class OrgUnit {
     private String leaderId;
     private Integer sort;
     private Integer status;
+    /** 是否继承上级组织的节点权限（false = 阻断继承） */
+    private Boolean inheritFromParent;
     private Instant createdAt;
     private Instant updatedAt;
 }
