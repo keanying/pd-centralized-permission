@@ -35,7 +35,8 @@ export const menuGroups: MenuGroup[] = [
   {
     // 人员明细权限不单独作为菜单：从架构树成员的"权限"、分配库、权限图谱进入
     key: 'org', title: '组织与人员', icon: OrgChartIcon, children: [
-      { path: '/orgs', title: '架构树', perms: ['pds:org:view', 'pds:user:view'], match: ['/user-grants'] },
+      { path: '/orgs', title: '架构树', perms: ['pds:org:view', 'pds:user:view'] },
+      { path: '/users', title: '人员管理', perms: ['pds:user:view'], match: ['/user-grants'] },
     ],
   },
   { key: 'app', title: '应用中心', icon: IconGridView, children: [{ path: '/apps', title: '应用中心', perms: ['pds:role:view'] }] },

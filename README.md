@@ -103,9 +103,9 @@ mvn -pl pds-server test -Dspring.datasource.url=jdbc:postgresql://localhost:5432
 | 分类 | 接口 |
 |---|---|
 | OIDC | `/.well-known/openid-configuration`、`/oauth2/authorize`、`/oauth2/token`（授权码/刷新/客户端凭证/令牌交换）、`/oauth2/jwks`、`/userinfo`、`/connect/logout`、`/oauth2/revoke` |
-| 组织架构 | `GET /api/v1/orgs/tree`、`POST/PUT/DELETE /api/v1/orgs`、`GET/POST /api/v1/positions` |
+| 组织架构 | `GET /api/v1/orgs/tree`、`POST/PUT/DELETE /api/v1/orgs`、`GET/POST /api/v1/positions`、`GET /api/v1/positions/stats`、`PUT/DELETE /api/v1/positions/{id}` |
 | 人员 | `GET/POST /api/v1/users`、`PUT /api/v1/users/{id}`、`PUT /api/v1/users/{id}/orgs`、`POST /api/v1/users/{id}/disable|leave|enable|reset-password`、`POST /api/v1/users/import`（批量导入，≤1000 行，逐行返回结果） |
-| 用户组 | `GET/POST /api/v1/groups`、`PUT /api/v1/groups/{id}/members` |
+| 用户组 | `GET/POST /api/v1/groups`、`PUT/DELETE /api/v1/groups/{id}`、`PUT /api/v1/groups/{id}/members` |
 | 应用 | `GET /api/v1/apps`、`PUT/DELETE /api/v1/apps/{app}`、`GET /api/v1/apps/{app}/delete-impact`、`POST /api/v1/apps/{app}/manifest`、`GET /api/v1/apps/{app}/permissions`、`POST /api/v1/apps/{app}/clients` |
 | 资源 | `POST /api/v1/resources`、`DELETE /api/v1/resources/{type}/{refId}`、`GET/POST/DELETE /api/v1/resources/{type}/{refId}/grants` |
 | 角色 | `GET/POST /api/v1/roles`、`PUT /api/v1/roles/{id}/permissions`、`GET/POST /api/v1/roles/{id}/bindings`、`DELETE /api/v1/role-bindings/{id}` |

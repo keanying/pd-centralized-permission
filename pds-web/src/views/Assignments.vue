@@ -208,7 +208,7 @@ const permOptions = computed(() => nodes.value.map((n) => ({ value: n.code, labe
     <div class="pds-card flex flex-wrap items-center gap-3" style="padding: 20px 24px">
       <Dropdown v-if="view === 'app'" trigger="click" transfer @on-click="(v: string) => (f.app = v)">
         <button class="pds-chip dark" style="height: 40px; padding: 0 16px; font-size: 13px">{{ appName }} ▾</button>
-        <template #list><DropdownMenu style="max-height: 320px; overflow: auto">
+        <template #list><DropdownMenu>
           <DropdownItem v-for="a in apps" :key="a.code" :name="a.code" :selected="a.code === f.app">{{ a.name }}</DropdownItem>
         </DropdownMenu></template>
       </Dropdown>

@@ -145,3 +145,11 @@ body {
 /* 圆形图标按钮 */
 .pds-icon-btn { width: 40px; height: 40px; border-radius: 50%; border: 1px solid #E5E7EB; background: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: #374151; }
 .pds-icon-btn:hover { background: var(--color-row); }
+
+/* 下拉弹层：只保留外层一个滚动条，加高并使用细滚动条 */
+.ivu-select-dropdown { max-height: 320px; }
+.ivu-dropdown-menu { overflow: visible; max-height: none; }
+.ivu-select-dropdown::-webkit-scrollbar { width: 6px; }
+.ivu-select-dropdown::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 3px; }
+.ivu-select-dropdown::-webkit-scrollbar-track { background: transparent; }
+.ivu-select-dropdown { scrollbar-width: thin; scrollbar-color: #D1D5DB transparent; }

@@ -2,10 +2,10 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message, Modal } from 'view-ui-plus'
-import { IconSearch, IconFilter, IconImport, IconPlus, IconMore, IconUserGroup, IconArrowUp, IconBolt, IconEdit } from '@kousum/semi-icons-vue'
+import { IconSearch, IconFilter, IconImport, IconPlus, IconMore, IconArrowUp, IconBolt } from '@kousum/semi-icons-vue'
 import {
-  api, flattenOrgs, ORG_TYPES, DATA_SCOPES, type GroupView, type OrgNode, type Position, type UserView, type Credential,
-  type OrgInfo, type NodeGrant, type PreviewItem, type MembersPreview, type HistoryItem, type RoleView,
+  api, flattenOrgs, ORG_TYPES, DATA_SCOPES, type OrgNode, type Position, type UserView, type Credential,
+  type OrgInfo, type NodeGrant, type MembersPreview, type RoleView,
 } from '@/api'
 import { useSession } from '@/stores/session'
 import { formatRelative } from '@/lib/utils'
@@ -22,27 +22,20 @@ const router = useRouter()
 const session = useSession()
 const canOrg = computed(() => session.has('pds:org:manage'))
 const canUser = computed(() => session.has('pds:user:manage'))
-const canGroup = computed(() => session.has('pds:group:manage'))
 const canGrant = computed(() => session.has('pds:grant:manage'))
 
-// ---------------- 左侧：组织 / 用户组
-const mode = ref<'org' | 'group'>((route.query.mode as any) === 'group' ? 'group' : 'org')
+// ---------------- 左侧：组织树（用户组、岗位在"人员管理"中维护）
 const tree = ref<OrgNode[]>([])
 const flat = computed(() => flattenOrgs(tree.value))
 const positions = ref<Position[]>([])
-const groups = ref<GroupView[]>([])
 const orgId = ref<string>((route.query.org as string) || '')
-const groupId = ref<string>((route.query.group as string) || '')
 const selectedOrg = computed(() => flat.value.find((o) => o.id === orgId.value) || null)
-const selectedGroup = computed(() => groups.value.find((g) => g.id === groupId.value) || null)
 
 async function loadTree() {
-  const [t, p, g] = await Promise.all([api.orgTree(), api.positions(), api.groups()])
+  const [t, p] = await Promise.all([api.orgTree(), api.positions()])
   tree.value = t
   positions.value = p
-  groups.value = g
   if (!orgId.value && t.length) orgId.value = t[0].id
-  if (!groupId.value && g.length) groupId.value = g[0].id
 }
 
 // ---------------- 右侧：人员表（筛选同步到地址栏，刷新/分享可还原）
@@ -54,15 +47,9 @@ const PAGE_SIZE = 10
 const rows = ref<UserView[]>([])
 const total = ref(0)
 const loading = ref(false)
-const members = ref<{ id: string; name: string; username: string }[]>([])
-
 async function loadUsers() {
   loading.value = true
   try {
-    if (mode.value === 'group') {
-      members.value = groupId.value ? await api.groupMembers(groupId.value) : []
-      return
-    }
     const r = await api.users({
       keyword: q.keyword || undefined, orgId: orgId.value || undefined, includeChildren: q.children,
       status: q.status || undefined, page: q.page, pageSize: PAGE_SIZE,
@@ -73,9 +60,9 @@ async function loadUsers() {
     loading.value = false
   }
 }
-watch([mode, orgId, groupId, () => q.status, () => q.userType, () => q.children, () => q.page], () => {
+watch([orgId, () => q.status, () => q.userType, () => q.children, () => q.page], () => {
   router.replace({ query: {
-    ...(mode.value === 'group' ? { mode: 'group', group: groupId.value } : { org: orgId.value }),
+    org: orgId.value, ...(tab.value === 'grants' ? { tab: 'grants' } : {}),
     ...(q.keyword ? { q: q.keyword } : {}), ...(q.status ? { status: q.status } : {}), ...(q.userType ? { type: q.userType } : {}),
     ...(q.children ? {} : { children: '0' }), ...(q.page > 1 ? { page: String(q.page) } : {}),
   } })
@@ -90,31 +77,28 @@ function selectOrg(n: OrgNode) { orgId.value = n.id; q.page = 1 }
 onMounted(async () => { await loadTree(); loadUsers(); loadNode() })
 
 // ---------------- 节点详情（V2：组织即权限）
-const tab = ref<'members' | 'positions' | 'grants' | 'preview' | 'history'>((route.query.tab as any) || 'members')
+const tab = ref<'members' | 'grants'>((route.query.tab as any) === 'grants' ? 'grants' : 'members')
 const info = ref<OrgInfo | null>(null)
 const nodeGrants = ref<NodeGrant[]>([])
-const preview = ref<PreviewItem[]>([])
-const posCounts = ref<{ positionId: string; code: string; name: string; count: number }[]>([])
-const history = ref<HistoryItem[]>([])
 async function loadNode() {
-  if (mode.value !== 'org' || !orgId.value) return
+  if (!orgId.value) return
   info.value = await api.orgInfo(orgId.value)
   loadTab()
 }
 async function loadTab() {
   if (!orgId.value) return
   if (tab.value === 'grants') nodeGrants.value = await api.orgGrants(orgId.value)
-  if (tab.value === 'preview') preview.value = await api.orgPreview(orgId.value)
-  if (tab.value === 'positions') posCounts.value = await api.orgPositions(orgId.value)
-  if (tab.value === 'history') history.value = await api.orgHistory(orgId.value)
+}
+// 双击树节点改名
+async function onRename(n: OrgNode, name: string) {
+  if (!name.trim() || name.trim() === n.name) return
+  await api.updateOrg(n.id, { name: name.trim() })
+  Message.success('已改名')
+  await loadTree()
+  loadNode()
 }
 watch(orgId, () => loadNode())
 watch(tab, () => { router.replace({ query: { ...route.query, tab: tab.value === 'members' ? undefined : tab.value } }); loadTab() })
-const previewByApp = computed(() => {
-  const m = new Map<string, PreviewItem[]>()
-  preview.value.forEach((p) => m.set(p.appName || p.appCode || '其他', [...(m.get(p.appName || p.appCode || '其他') || []), p]))
-  return [...m.entries()]
-})
 
 function toggleInherit(v: boolean) {
   const n = info.value!
@@ -219,7 +203,7 @@ function toggleStatus(u: UserView) {
 
 const create = reactive({ open: false, username: '', empNo: '', name: '', mobile: '', email: '', userType: 'FULL_TIME', orgId: '', positionId: '' })
 function openCreate() {
-  Object.assign(create, { open: true, username: '', empNo: '', name: '', mobile: '', email: '', userType: 'FULL_TIME', orgId: mode.value === 'org' ? orgId.value : '', positionId: '' })
+  Object.assign(create, { open: true, username: '', empNo: '', name: '', mobile: '', email: '', userType: 'FULL_TIME', orgId: orgId.value, positionId: '' })
 }
 const secret = reactive({ open: false, title: '', value: '' })
 async function submitCreate() {
@@ -277,92 +261,27 @@ const moveTargets = computed(() => {
   return flat.value.filter((o) => !banned.has(o.id))
 })
 
-// 岗位库
-const posForm = reactive({ open: false, code: '', name: '', scenicId: '' })
-const scenics = computed(() => flat.value.filter((o) => o.type === 'SCENIC'))
-async function submitPosition() {
-  if (!posForm.code.trim() || !posForm.name.trim()) { Message.warning('请填写岗位编码与名称'); return false }
-  await api.createPosition({ code: posForm.code.trim(), name: posForm.name.trim(), scenicId: posForm.scenicId || undefined })
-  Message.success('已新增岗位')
-  posForm.code = posForm.name = ''
-  positions.value = await api.positions()
-  return false
-}
-
-// 用户组
-const groupForm = reactive({ open: false, code: '', name: '', description: '' })
-async function submitGroup() {
-  if (!groupForm.code.trim() || !groupForm.name.trim()) { Message.warning('请填写编码与名称'); return false }
-  const g: any = await api.createGroup({ code: groupForm.code.trim(), name: groupForm.name.trim(), description: groupForm.description || undefined })
-  groups.value = await api.groups()
-  groupId.value = g.id
-}
-const addMember = reactive({ open: false, ids: [] as string[] })
-async function submitMembers() {
-  const ids = [...new Set([...members.value.map((m) => m.id), ...addMember.ids])]
-  await api.setGroupMembers(groupId.value, ids)
-  Message.success('已添加成员')
-  addMember.ids = []
-  groups.value = await api.groups()
-  loadUsers()
-}
-function removeMember(m: { id: string; name: string }) {
-  Modal.confirm({
-    title: '移出用户组', content: `将【${m.name}】移出【${selectedGroup.value?.name}】？其经由该用户组获得的权限将立即失效。`, okText: '移出',
-    onOk: async () => {
-      await api.setGroupMembers(groupId.value, members.value.filter((x) => x.id !== m.id).map((x) => x.id))
-      Message.success('已移出')
-      groups.value = await api.groups()
-      loadUsers()
-    },
-  })
-}
 </script>
 
 <template>
-  <div class="grid grid-cols-1 gap-5 xl:grid-cols-[372px_1fr]">
+  <div class="grid grid-cols-1 gap-5 xl:grid-cols-[340px_1fr]">
     <!-- 左：组织树 / 用户组 -->
     <div class="pds-card self-start">
       <div class="pds-card-title">
-        <span>{{ mode === 'org' ? '组织树' : '用户组' }}</span>
-        <span class="flex items-center gap-1.5">
-          <button v-if="mode === 'org' && canOrg && tree.length" class="pds-btn dark sm" @click="onOrgAction('create', selectedOrg || tree[0])"><IconPlus size="small" /> 新增组织</button>
-          <button v-if="mode === 'group' && canGroup" class="pds-btn dark sm" @click="Object.assign(groupForm, { open: true, code: '', name: '', description: '' })"><IconPlus size="small" /> 新建用户组</button>
-          <Dropdown trigger="click" transfer placement="bottom-end"
-                    @on-click="(n: string) => (n === 'pos' ? (posForm.open = true) : (mode = n === 'group' ? 'group' : 'org'))">
-            <span class="flex size-8 cursor-pointer items-center justify-center rounded-full hover:bg-row"><IconMore size="small" /></span>
-            <template #list><DropdownMenu>
-              <DropdownItem v-if="mode === 'org'" name="group">切换到用户组</DropdownItem>
-              <DropdownItem v-else name="org">切换到组织树</DropdownItem>
-              <DropdownItem name="pos">岗位库</DropdownItem>
-            </DropdownMenu></template>
-          </Dropdown>
-        </span>
+        <span>组织树</span>
+        <button v-if="canOrg && tree.length" class="pds-btn dark sm" @click="onOrgAction('create', selectedOrg || tree[0])"><IconPlus size="small" /> 新增组织</button>
       </div>
-      <OrgTree v-if="mode === 'org'" :nodes="tree" :selected-id="orgId" :can-manage="canOrg" @select="selectOrg" @action="onOrgAction" @move="onMove" />
-      <div v-else class="flex flex-col gap-1">
-        <div v-for="g in groups" :key="g.id" class="flex h-10 cursor-pointer items-center gap-2 rounded-xl px-3 text-[14px] transition-colors"
-             :class="g.id === groupId ? 'bg-accent font-medium text-ink' : 'hover:bg-row'" @click="groupId = g.id">
-          <IconUserGroup size="small" :class="g.id === groupId ? 'text-ink' : 'text-[#9CA3AF]'" />
-          <span class="flex-1 truncate">{{ g.name }}</span>
-          <span class="text-[12px]" :class="g.id === groupId ? 'text-ink' : 'text-[#9CA3AF]'">{{ g.memberCount }}</span>
-        </div>
-        <p v-if="!groups.length" class="pds-muted py-6 text-center">暂无用户组</p>
-        <p class="pds-muted mb-0 mt-3">用户组把跨组织的人员归为一类（如"应急小组"），可整体授予角色或资源。</p>
-      </div>
+      <OrgTree :nodes="tree" :selected-id="orgId" :can-manage="canOrg" @select="selectOrg" @action="onOrgAction" @move="onMove" @rename="onRename" />
+      <p v-if="canOrg" class="pds-muted mb-0 mt-3">双击组织名称可直接改名；拖动组织可调整上级。</p>
     </div>
 
     <!-- 右：节点详情 / 用户组成员 -->
     <div class="flex min-w-0 flex-col gap-5">
       <div class="pds-card min-w-0">
-        <template v-if="mode === 'org'">
+        <template v-if="true">
           <!-- 节点标题：名称、编码可直接修改（含根组织） -->
           <div v-if="info" class="mb-5 flex flex-wrap items-center gap-x-5 gap-y-2">
-            <button class="group flex cursor-pointer items-center gap-2 border-0 bg-transparent p-0" :disabled="!canOrg" title="修改名称、编码、负责人"
-                    @click="selectedOrg && onOrgAction('edit', selectedOrg)">
-              <span class="text-[22px] font-bold text-ink">{{ info.name }}</span>
-              <IconEdit v-if="canOrg" size="small" class="text-[#9CA3AF] group-hover:text-accent-text" />
-            </button>
+            <span class="text-[22px] font-bold text-ink">{{ info.name }}</span>
             <span class="pds-badge gray">{{ ORG_TYPES[info.type] || info.type }}</span>
             <span class="text-[13px] text-[#6B7280]">编码 {{ info.code }}</span>
             <span class="text-[13px] text-[#6B7280]">负责人 {{ info.leaderName || '未指定' }}</span>
@@ -376,8 +295,7 @@ function removeMember(m: { id: string; name: string }) {
             <Dropdown v-if="canOrg && selectedOrg" trigger="click" transfer placement="bottom-end" @on-click="(n: string) => onOrgAction(n, selectedOrg!)">
               <button class="pds-icon-btn" style="width: 32px; height: 32px"><IconMore size="small" /></button>
               <template #list><DropdownMenu>
-                <DropdownItem name="edit">编辑名称 / 编码 / 负责人</DropdownItem>
-                <DropdownItem v-if="!info.root" name="edit">移动到…</DropdownItem>
+                <DropdownItem name="edit">编辑编码 / 负责人 / 上级</DropdownItem>
                 <DropdownItem name="create">新增下级组织</DropdownItem>
                 <DropdownItem v-if="!info.root" name="delete" divided>删除</DropdownItem>
               </DropdownMenu></template>
@@ -385,17 +303,14 @@ function removeMember(m: { id: string; name: string }) {
           </div>
           <div class="pds-tabs">
             <button :class="{ on: tab === 'members' }" @click="tab = 'members'">成员</button>
-            <button :class="{ on: tab === 'positions' }" @click="tab = 'positions'">岗位</button>
             <button :class="{ on: tab === 'grants' }" @click="tab = 'grants'">节点权限</button>
-            <button :class="{ on: tab === 'preview' }" @click="tab = 'preview'">生效权限预览</button>
-            <button :class="{ on: tab === 'history' }" @click="tab = 'history'">变更记录</button>
           </div>
         </template>
 
         <!-- 成员 -->
-        <template v-if="mode === 'group' || tab === 'members'">
+        <template v-if="tab === 'members'">
           <div class="mb-5 flex flex-wrap items-center gap-3">
-            <template v-if="mode === 'org'">
+            <template v-if="true">
               <div class="pds-search w-[256px]"><IconSearch /><input v-model="q.keyword" placeholder="搜索工号 / 姓名" /></div>
               <Poptip placement="bottom-start" transfer width="260">
                 <button class="pds-pill"><IconFilter size="small" /> 筛选<span v-if="filterCount" class="pds-badge dark ml-1" style="height: 18px; padding: 0 6px">{{ filterCount }}</span></button>
@@ -413,14 +328,8 @@ function removeMember(m: { id: string; name: string }) {
               <button v-if="canUser" class="pds-btn ghost" @click="importOpen = true"><IconImport size="small" /> 批量导入</button>
               <button v-if="canUser" class="pds-btn ghost" @click="openCreate"><IconPlus size="small" /> 新建人员</button>
             </template>
-            <template v-else>
-              <div class="text-[15px] font-semibold text-ink">{{ selectedGroup?.name || '—' }}</div>
-              <span class="pds-muted">{{ selectedGroup?.description }}</span>
-              <span class="flex-1" />
-              <button v-if="canGroup && selectedGroup" class="pds-btn dark" @click="addMember.open = true"><IconPlus size="small" /> 添加成员</button>
-            </template>
           </div>
-          <table v-if="mode === 'org'" class="pds-table">
+          <table class="pds-table">
           <thead><tr><th>工号</th><th>姓名</th><th>主部门</th><th>岗位</th><th>人员类型</th><th>状态</th><th>最近登录</th><th>操作</th></tr></thead>
           <tbody>
             <tr v-for="u in rows" :key="u.id">
@@ -446,21 +355,8 @@ function removeMember(m: { id: string; name: string }) {
           </tbody>
         </table>
 
-        <table v-else class="pds-table">
-          <thead><tr><th>姓名</th><th>账号</th><th>操作</th></tr></thead>
-          <tbody>
-            <tr v-for="m in members" :key="m.id">
-              <td class="text-ink">{{ m.name }}</td><td class="text-[#6B7280]">{{ m.username }}</td>
-              <td><span class="flex gap-3">
-                <button class="pds-link" @click="router.push({ path: '/user-grants', query: { userId: m.id } })">权限</button>
-                <button v-if="canGroup" class="pds-link red" @click="removeMember(m)">移出</button>
-              </span></td>
-            </tr>
-            <tr v-if="!loading && !members.length"><td colspan="3" class="empty">该用户组暂无成员</td></tr>
-          </tbody>
-        </table>
 
-        <div v-if="mode === 'org'" class="pds-pager">
+        <div class="pds-pager">
           <span class="pds-muted">共 {{ total.toLocaleString('en-US') }} 人<template v-if="selectedOrg"> · {{ selectedOrg.name }}{{ q.children ? '（含下级）' : '' }}</template></span>
           <div class="pages">
             <button :disabled="q.page <= 1" @click="q.page--">‹</button>
@@ -470,17 +366,8 @@ function removeMember(m: { id: string; name: string }) {
         </div>
         </template>
 
-        <!-- 岗位 -->
-        <table v-else-if="tab === 'positions'" class="pds-table">
-          <thead><tr><th>岗位</th><th>编码</th><th>本节点人数</th></tr></thead>
-          <tbody>
-            <tr v-for="p in posCounts" :key="p.positionId"><td class="text-ink">{{ p.name }}</td><td class="pds-mono">{{ p.code }}</td><td>{{ p.count }}</td></tr>
-            <tr v-if="!posCounts.length"><td colspan="3" class="empty">本节点人员暂未设置岗位</td></tr>
-          </tbody>
-        </table>
-
         <!-- 节点权限 -->
-        <template v-else-if="tab === 'grants'">
+        <template v-else>
           <div v-if="canGrant" class="mb-4 flex gap-2">
             <button class="pds-btn accent" @click="openNodeGrant('PERM')"><IconPlus size="small" /> 从权限树添加权限</button>
             <button class="pds-btn ghost" @click="openNodeGrant('ROLE')">挂载角色</button>
@@ -511,31 +398,6 @@ function removeMember(m: { id: string; name: string }) {
           <p class="pds-muted mb-0 mt-3">"本节点及下级"的授权向下继承；阻断继承的节点不再继承上级。人员的最终权限 = 组织（含继承）∪ 岗位 ∪ 用户组 ∪ 角色 ∪ 个人授权，禁止优先。</p>
         </template>
 
-        <!-- 生效权限预览 -->
-        <template v-else-if="tab === 'preview'">
-          <p class="pds-muted mt-0">仅因在本节点任职会获得的权限（含上级继承与组织上挂载的角色），不含岗位、用户组与个人授权。</p>
-          <div v-for="[appName, items] in previewByApp" :key="appName" class="mb-5">
-            <div class="mb-2 text-[14px] font-semibold text-ink">{{ appName }} <span class="pds-muted">{{ items.length }} 项</span></div>
-            <div class="flex flex-col gap-1.5">
-              <div v-for="p in items" :key="p.code" class="flex items-center gap-3 rounded-xl bg-row px-4 py-2.5">
-                <span class="text-[14px] text-ink">{{ p.name }}</span><span class="pds-mono text-[#9CA3AF]">{{ p.code }}</span>
-                <span v-if="p.risk === 'HIGH'" class="pds-badge bad" style="height: 18px">高风险</span>
-                <span class="flex-1" />
-                <span v-for="src in p.sources" :key="src" class="pds-badge white">{{ src }}</span>
-              </div>
-            </div>
-          </div>
-          <div v-if="!preview.length" class="pds-muted py-10 text-center">在本节点任职不会获得任何权限</div>
-        </template>
-
-        <!-- 变更记录 -->
-        <template v-else-if="tab === 'history'">
-          <div v-for="h in history" :key="h.ts + h.action" class="flex gap-3 border-b border-[#F0F2EE] py-3 last:border-0">
-            <span class="mt-1.5 size-2 shrink-0 rounded-full bg-accent" />
-            <div><div class="text-[14px] text-ink">{{ h.action }}</div><div class="pds-muted mt-0.5">{{ h.userName || '系统' }} · {{ new Date(h.ts).toLocaleString('zh-CN', { hour12: false }) }}</div></div>
-          </div>
-          <div v-if="!history.length" class="pds-muted py-10 text-center">暂无变更记录</div>
-        </template>
       </div>
     </div>
 
@@ -582,34 +444,8 @@ function removeMember(m: { id: string; name: string }) {
       </Form>
     </PdsModal>
 
-    <PdsModal v-model="posForm.open" title="岗位库" width="560" ok-text="新增岗位" :on-ok="submitPosition">
-      <div class="mb-4 flex flex-wrap gap-2">
-        <span v-for="p in positions" :key="p.id" class="pds-badge gray">{{ p.name }} · {{ p.code }}</span>
-        <span v-if="!positions.length" class="pds-muted">暂无岗位</span>
-      </div>
-      <Form v-if="canOrg" :label-width="70">
-        <div class="grid grid-cols-2 gap-x-4">
-          <FormItem label="编码"><Input v-model="posForm.code" placeholder="如 SELLER" /></FormItem>
-          <FormItem label="名称"><Input v-model="posForm.name" placeholder="如 售票员" /></FormItem>
-        </div>
-        <FormItem label="所属景区">
-          <Select v-model="posForm.scenicId" clearable placeholder="不选为集团通用岗位" transfer><Option v-for="s in scenics" :key="s.id" :value="s.id">{{ s.name }}</Option></Select>
-        </FormItem>
-      </Form>
-    </PdsModal>
 
-    <PdsModal v-model="groupForm.open" title="新建用户组" :on-ok="submitGroup">
-      <Form :label-width="70">
-        <FormItem label="编码" required><Input v-model="groupForm.code" placeholder="如 EMERGENCY_TEAM" /></FormItem>
-        <FormItem label="名称" required><Input v-model="groupForm.name" placeholder="如 应急小组" /></FormItem>
-        <FormItem label="说明"><Input v-model="groupForm.description" type="textarea" :rows="2" /></FormItem>
-      </Form>
-    </PdsModal>
 
-    <PdsModal v-model="addMember.open" :title="`添加成员 · ${selectedGroup?.name}`" ok-text="添加" :on-ok="submitMembers">
-      <UserSelect v-model="addMember.ids" multiple placeholder="搜索并选择人员（可多选）" />
-      <p class="pds-muted mb-0 mt-3">添加后，成员经由该用户组获得的角色与资源权限立即生效。</p>
-    </PdsModal>
 
     <!-- 节点授权 -->
     <PdsModal v-model="ng.open" :title="ng.kind === 'PERM' ? `从权限树添加权限 · ${info?.name}` : `挂载角色 · ${info?.name}`" width="640" ok-text="添加" :on-ok="submitNodeGrant">

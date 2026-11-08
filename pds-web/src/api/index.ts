@@ -151,6 +151,9 @@ export const api = {
   deleteOrg: (id: string) => del(`/orgs/${id}`),
   positions: () => get<Position[]>('/positions'),
   createPosition: (body: object) => post('/positions', body),
+  positionStats: () => get<{ id: string; code: string; name: string; scenicId?: string; status: number; members: number; grants: number }[]>('/positions/stats'),
+  updatePosition: (id: string, body: object) => put(`/positions/${id}`, body),
+  deletePosition: (id: string) => del(`/positions/${id}`),
 
   users: (params: object) => get<PageResult<UserView>>('/users', params),
   user: (id: string) => get<UserView>(`/users/${id}`),
@@ -165,6 +168,8 @@ export const api = {
 
   groups: () => get<GroupView[]>('/groups'),
   createGroup: (body: object) => post('/groups', body),
+  updateGroup: (id: string, body: object) => put(`/groups/${id}`, body),
+  deleteGroup: (id: string) => del(`/groups/${id}`),
   groupMembers: (id: string) => get<{ id: string; name: string; username: string }[]>(`/groups/${id}/members`),
   setGroupMembers: (id: string, userIds: string[]) => put(`/groups/${id}/members`, { userIds }),
 
