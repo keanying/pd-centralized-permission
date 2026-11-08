@@ -41,7 +41,7 @@ public final class PermTreeDtos {
                            String draft, boolean codeLocked, Instant updatedAt) {
     }
 
-    public record NodeDetail(NodeView node, List<PathItem> path, List<NodeView> children, long holderCount) {
+    public record NodeDetail(NodeView node, List<PathItem> path, List<NodeView> children, long holderCount, List<String> aliases) {
     }
 
     public record PathItem(String id, String code, String name) {

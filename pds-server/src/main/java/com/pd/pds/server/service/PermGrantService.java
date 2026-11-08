@@ -53,6 +53,8 @@ public class PermGrantService {
     private final AuditService audit;
     @org.springframework.beans.factory.annotation.Autowired
     private SubjectNames subjectNames;
+    @org.springframework.beans.factory.annotation.Autowired
+    private PermAliases aliases;
 
     public PermGrantService(AuthGrantMapper grantMapper, PermPointMapper pointMapper, OrgUnitMapper orgMapper,
                             UserOrgMapper userOrgMapper, AppService appService, Guard guard, AuthzService authz,
@@ -68,7 +70,14 @@ public class PermGrantService {
     }
 
     /** 校验并返回将写入的记录（不落库），供影响分析与批量授权共用。 */
+    private Spec normalize(Spec s) {
+        String code = aliases.resolve(s.permCode());
+        return code.equals(s.permCode()) ? s : new Spec(s.subjectType(), s.subjectId(), s.includeChildren(), code, s.effect(),
+                s.dataScope(), s.scopeValues(), s.validFrom(), s.validTo(), s.reason(), s.source());
+    }
+
     public PermPoint check(Spec s) {
+        s = normalize(s);
         ResolvedScope scope = guard.require(PdsPermissions.GRANT_MANAGE);
         if (!"ALLOW".equals(s.effect()) && !"DENY".equals(s.effect())) {
             throw new BizException(ErrorCode.VALIDATION_FAILED, "效果只能是 ALLOW 或 DENY");
@@ -98,6 +107,7 @@ public class PermGrantService {
     /** 新增授权；同一主体对同一节点已有相同效果的授权时，更新其有效期、数据范围与原因。 */
     @Transactional
     public AuthGrant create(Spec s) {
+        s = normalize(s);
         PermPoint p = check(s);
         CurrentActor a = guard.requireUser();
         boolean children = "ORG".equals(s.subjectType()) && s.includeChildren();

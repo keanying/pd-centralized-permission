@@ -92,6 +92,8 @@ public class PermTreeService {
     private final AuditService audit;
     private final JsonMapper json;
     private final DistributionService distribution;
+    @org.springframework.beans.factory.annotation.Autowired
+    private PermAliases aliases;
 
     public PermTreeService(PermPointMapper pointMapper, PermTreeVersionMapper versionMapper, AppInfoMapper appMapper,
                            RolePermMapper rolePermMapper, AuthGrantMapper grantMapper, SysUserMapper userMapper,
@@ -166,7 +168,8 @@ public class PermTreeService {
                 .sorted(Comparator.comparingInt(PermTreeDtos.NodeView::sort).thenComparing(PermTreeDtos.NodeView::code))
                 .toList();
         long holders = p.getStatus() != null && p.getStatus() == 1 ? holderUsers(p.getCode()).size() : 0;
-        return new PermTreeDtos.NodeDetail(view(p, typeMap), path, children, holders);
+        return new PermTreeDtos.NodeDetail(view(p, typeMap), path, children, holders,
+                aliases.ofNew(p.getCode()).stream().map(com.pd.pds.server.entity.PermCodeAlias::getOldCode).sorted().toList());
     }
 
     // ------------------------------------------------------------------ 新增 / 修改 / 删除（草稿）

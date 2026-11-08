@@ -525,6 +525,60 @@ class PdsIntegrationTest {
         assertThat((List<String>) JsonPath.read(eff, "$.data.permissions[?(@.code=='pdk:ticket:upload')].state")).containsExactly("NONE");
     }
 
+    @Test
+    @Order(60)
+    void V2_修改已发布权限编码_迁移授权_保留兼容别名() throws Exception {
+        String tree = api(get("/api/v1/perm-tree?app=pdk"), adminToken).getContentAsString();
+        String domainId = ((List<String>) JsonPath.read(tree, "$.data[?(@.code=='pdk:ticket')].id")).get(0);
+        api(post("/api/v1/assignments/batch"), adminToken, """
+                {"subjects":[{"type":"USER","id":"%s"}],"objects":[{"type":"PERM","code":"pdk:ticket:upload"}],
+                 "effect":"ALLOW","reason":"上传"}""".formatted(zhangsanId));
+
+        // 预览：本节点与两个下级一起改
+        String impact = api(post("/api/v1/perm-nodes/" + domainId + "/recode/impact"), adminToken,
+                "{\"newCode\":\"pdk:tkt\",\"includeChildren\":true}").getContentAsString();
+        assertThat((List<String>) JsonPath.read(impact, "$.data.changes[*].newCode"))
+                .containsExactlyInAnyOrder("pdk:tkt", "pdk:tkt:upload", "pdk:tkt:download");
+        assertThat((Integer) JsonPath.read(impact, "$.data.grants")).isEqualTo(1);
+        api(post("/api/v1/perm-nodes/" + domainId + "/recode"), adminToken,
+                "{\"newCode\":\"pdk:tkt\",\"includeChildren\":true,\"keepAlias\":true,\"reason\":\"统一编码规范\"}");
+
+        // 授权已迁移到新编码
+        String eff = api(get("/api/v1/users/" + zhangsanId + "/effective?app=pdk"), adminToken).getContentAsString();
+        assertThat((List<String>) JsonPath.read(eff, "$.data.permissions[?(@.code=='pdk:tkt:upload')].state")).containsExactly("GRANTED");
+        assertThat((List<String>) JsonPath.read(eff, "$.data.permissions[*].code")).doesNotContain("pdk:ticket:upload");
+        // 已接入系统按原编码鉴权仍然有效；快照同时返回新旧编码
+        String pdk = clientToken("pdk-service", "pdk-service-secret", "pds.authz pds.manifest");
+        String check = api(post("/api/v1/authz/check"), pdk,
+                "{\"subject\":\"" + zhangsanId + "\",\"permission\":\"pdk:ticket:upload\"}").getContentAsString();
+        assertThat((Boolean) JsonPath.read(check, "$.data.allowed")).isTrue();
+        String snap = api(get("/api/v1/authz/snapshot?app=pdk&subject=" + zhangsanId), pdk).getContentAsString();
+        assertThat((List<String>) JsonPath.read(snap, "$.data.permissions")).contains("pdk:tkt:upload", "pdk:ticket:upload");
+        // 按原编码授权会落到新节点
+        String nodeAliases = api(get("/api/v1/perm-nodes/" + domainId), adminToken).getContentAsString();
+        assertThat((List<String>) JsonPath.read(nodeAliases, "$.data.aliases")).containsExactly("pdk:ticket");
+        // 清单再次提交原编码，不会重复新建节点
+        String manifest = api(post("/api/v1/apps/pdk/manifest"), pdk, """
+                {"name":"PDK 知识服务","version":"2026.11.2","category":"DATA_OUTLET",
+                 "permissions":[{"code":"pdk:kb:view","name":"查看知识库","type":"FUNCTION"},
+                                {"code":"pdk:search:use","name":"调用检索","type":"API"},
+                                {"code":"pdk:ticket:upload","name":"上传文档","type":"BUTTON"}],
+                 "resourceTypes":[{"type":"pdk:kb","name":"知识库"}]}""").getContentAsString();
+        assertThat((Integer) JsonPath.read(manifest, "$.data.added")).isZero();
+        assertThat(api(get("/api/v1/perm-tree?app=pdk"), adminToken).getContentAsString()).doesNotContain("\"code\":\"pdk:ticket:upload\"");
+
+        // 移除兼容后，原编码不再有效
+        api(delete("/api/v1/perm-code-aliases/pdk:ticket:upload"), adminToken);
+        check = api(post("/api/v1/authz/check"), pdk,
+                "{\"subject\":\"" + zhangsanId + "\",\"permission\":\"pdk:ticket:upload\"}").getContentAsString();
+        assertThat((Boolean) JsonPath.read(check, "$.data.allowed")).isFalse();
+
+        // PDS 自身的编码不能改
+        String pdsTree = api(get("/api/v1/perm-tree?app=pds"), adminToken).getContentAsString();
+        String pdsNode = JsonPath.read(pdsTree, "$.data[0].id");
+        assertThat(raw(post("/api/v1/perm-nodes/" + pdsNode + "/recode"), adminToken, "{\"newCode\":\"pds:x\"}").getStatus()).isEqualTo(409);
+    }
+
     // ------------------------------------------------------------------ 工具方法
 
     /** 授权码 + PKCE 完整登录；needNewPassword 不为空时处理首次登录改密。 */

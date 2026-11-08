@@ -92,7 +92,7 @@ public class AuthzApiService {
         }
         return new AuthzDtos.Snapshot(authz.version(), app,
                 new AuthzDtos.SnapshotUser(u.getId(), u.getName(), u.getScenicId(), u.getPrimaryOrgId()),
-                eff.permissionCodes(), scopes, eff.scenicScope(), resources, eff.maxSecurityLevel(),
+                withAliases(eff.permissionCodes()), scopes, eff.scenicScope(), resources, eff.maxSecurityLevel(),
                 List.of(), SNAPSHOT_TTL_SECONDS, roleClaims.rolesFor(u.getId(), app), eff.visibleCodes());
     }
 
@@ -106,6 +106,13 @@ public class AuthzApiService {
     }
 
     // ------------------------------------------------------------------ 内部
+
+    /** 快照中同时返回仍保留兼容的旧编码。 */
+    private java.util.Set<String> withAliases(java.util.Set<String> codes) {
+        java.util.Set<String> out = new java.util.TreeSet<>(codes);
+        out.addAll(aliases.aliasesOf(codes));
+        return out;
+    }
 
     private EffectivePermissions effectiveFor(String subject, String app) {
         CurrentActor a = guard.actor();
@@ -136,9 +143,13 @@ public class AuthzApiService {
         return code.substring(0, code.indexOf(':'));
     }
 
-    private static Decision decide(EffectivePermissions eff, AuthzDtos.CheckItem item) {
+    @org.springframework.beans.factory.annotation.Autowired
+    private PermAliases aliases;
+
+    private Decision decide(EffectivePermissions eff, AuthzDtos.CheckItem item) {
         if (StringUtils.hasText(item.permission())) {
-            return eff.explain(item.permission());
+            // 编码修改后保留的兼容别名：按原编码检查等同于检查新编码
+            return eff.explain(aliases.resolve(item.permission()));
         }
         if (!StringUtils.hasText(item.resourceId())) {
             throw new BizException(ErrorCode.VALIDATION_FAILED, "资源鉴权必须指定 resourceId");

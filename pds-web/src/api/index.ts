@@ -85,7 +85,12 @@ export interface PermNode {
   securityLevel?: number; grantable: boolean; needMfa: boolean; dataScopeEnabled: boolean; source: 'MANIFEST' | 'MANUAL'
   status: number; description?: string; sort: number; draft?: 'NEW' | 'MODIFIED' | 'DELETING'; codeLocked: boolean; updatedAt?: string
 }
-export interface PermNodeDetail { node: PermNode; path: { id: string; code: string; name: string }[]; children: PermNode[]; holderCount: number }
+export interface PermNodeDetail { node: PermNode; path: { id: string; code: string; name: string }[]; children: PermNode[]; holderCount: number; aliases: string[] }
+export interface RecodeImpact {
+  changes: { nodeId: string; name: string; oldCode: string; newCode: string }[]; grants: number; rolePerms: number; userPerms: number
+  aliases: number; unaffectedChildren: string[]
+}
+export interface CodeAlias { oldCode: string; newCode: string; reason?: string; createdBy?: string; createdAt: string }
 export interface TreeChange { nodeId: string; code: string; name: string; kind: 'NEW' | 'MODIFY' | 'DELETE'; fields: { field: string; label: string; before: string; after: string }[] }
 export interface TreeVersion { id: string; appCode: string; version: string; summary: string; changeCount: number; publishedBy?: string; publishedAt: string }
 export interface Holder { userId: string; name: string; empNo?: string; deptName?: string; sources: string[] }
@@ -219,6 +224,10 @@ export const api = {
   discardNode: (id: string) => post(`/perm-nodes/${id}/discard`),
   nodeHolders: (id: string) => get<{ total: number; items: Holder[] }>(`/perm-nodes/${id}/holders`, { limit: 200 }),
   nodeHistory: (id: string) => get<HistoryItem[]>(`/perm-nodes/${id}/history`),
+  recodeImpact: (id: string, body: object) => post<RecodeImpact>(`/perm-nodes/${id}/recode/impact`, body),
+  recodeNode: (id: string, body: object) => post<RecodeImpact>(`/perm-nodes/${id}/recode`, body),
+  codeAliases: (app: string) => get<CodeAlias[]>(`/perm-tree/${app}/aliases`),
+  removeCodeAlias: (oldCode: string) => del(`/perm-code-aliases/${encodeURIComponent(oldCode)}`),
   treeDiff: (app: string) => get<TreeChange[]>(`/perm-tree/${app}/diff`),
   nextVersion: (app: string) => get<{ version: string }>(`/perm-tree/${app}/next-version`),
   publishTree: (app: string, summary?: string) => post<TreeVersion>(`/perm-tree/${app}/publish`, { summary }),

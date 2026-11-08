@@ -67,6 +67,8 @@ public class AppService {
     private final AuthzService authz;
     private final AuditService audit;
     private final PermNodeTypeService nodeTypes;
+    @org.springframework.beans.factory.annotation.Autowired
+    private PermAliases permAliases;
 
     public AppService(AppInfoMapper appMapper, PermPointMapper pointMapper, ResourceTypeMapper typeMapper,
                       PermResourceMapper resourceMapper, ResourceGrantMapper grantMapper, UserPermMapper userPermMapper,
@@ -207,7 +209,15 @@ public class AppService {
                     "应用准入：单点登录进入该应用的前提"));
         }
         int sort = 0;
-        for (AppDtos.ManifestPermission p : permissions) {
+        for (AppDtos.ManifestPermission p0 : permissions) {
+            // 清单中的旧编码（已修改并保留兼容）对应到改名后的节点，不重复新建
+            AppDtos.ManifestPermission p = p0;
+            String resolved = permAliases.resolve(p0.code());
+            String resolvedParent = p0.parent() == null ? null : permAliases.resolve(p0.parent());
+            if (!resolved.equals(p0.code()) && existing.containsKey(resolved) || (resolvedParent != null && !resolvedParent.equals(p0.parent()))) {
+                p = new AppDtos.ManifestPermission(existing.containsKey(resolved) ? resolved : p0.code(), p0.name(), p0.type(), p0.risk(),
+                        p0.description(), resolvedParent);
+            }
             if (!p.code().startsWith(prefix)) {
                 throw new BizException(ErrorCode.VALIDATION_FAILED, "权限点编码必须以「" + prefix + "」开头：" + p.code());
             }

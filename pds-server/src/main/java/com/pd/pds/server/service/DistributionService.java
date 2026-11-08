@@ -59,6 +59,7 @@ public class DistributionService {
     private static final Duration[] BACKOFF = {Duration.ofSeconds(10), Duration.ofSeconds(30), Duration.ofMinutes(2), Duration.ofMinutes(10)};
     public static final Map<String, String> EVENT_LABELS = Map.of(
             "perm_tree.published", "权限树发布",
+            "perm_node.recoded", "权限编码修改",
             "role.updated", "角色权限变更",
             "role.members.changed", "角色成员变更",
             "role.deleted", "角色删除",

@@ -7,7 +7,7 @@ import {
 } from '@kousum/semi-icons-vue'
 import {
   api, SECURITY_LEVELS, type Holder, type HistoryItem, type NodeType, type PermNode, type PermNodeDetail, type TreeApp,
-  type TreeChange, type TreeVersion,
+  type TreeChange, type TreeVersion, type RecodeImpact, type CodeAlias,
 } from '@/api'
 import { useSession } from '@/stores/session'
 import { formatTime } from '@/lib/utils'
@@ -215,6 +215,39 @@ async function submitMove() {
   refresh()
 }
 
+// ---------------- 修改已发布节点的编码（迁移授权，可保留原编码兼容）
+const recode = reactive({ open: false, code: '', children: true, keepAlias: true, reason: '', impact: null as RecodeImpact | null, loading: false })
+const codeOk = computed(() => /^[a-z][a-z0-9_]*(:[a-z0-9_]+)+$/.test(recode.code) && recode.code.startsWith(app.value + ':'))
+function openRecode() {
+  Object.assign(recode, { open: true, code: node.value!.code, children: true, keepAlias: true, reason: '', impact: null })
+  previewRecode()
+}
+let rcTimer: number | undefined
+function previewRecode() {
+  window.clearTimeout(rcTimer)
+  rcTimer = window.setTimeout(async () => {
+    if (!recode.open || !node.value) return
+    recode.loading = true
+    try { recode.impact = await api.recodeImpact(node.value.id, { newCode: codeOk.value ? recode.code : node.value.code, includeChildren: recode.children }) }
+    finally { recode.loading = false }
+  }, 300)
+}
+watch(() => [recode.code, recode.children], previewRecode)
+async function submitRecode() {
+  if (!codeOk.value) { Message.warning(`编码须以「${app.value}:」开头，只能包含小写字母、数字、下划线和冒号`); return false }
+  if (recode.code === node.value!.code) { Message.warning('新编码与原编码相同'); return false }
+  if (!recode.reason.trim()) { Message.warning('请填写修改原因'); return false }
+  const r = await api.recodeNode(node.value!.id, { newCode: recode.code, includeChildren: recode.children, keepAlias: recode.keepAlias, reason: recode.reason.trim() })
+  Message.success(`已修改 ${r.changes.length} 个编码，授权与角色已迁移${recode.keepAlias ? '，原编码继续兼容' : ''}`)
+  await refresh()
+}
+function removeAlias(code: string) {
+  Modal.confirm({ title: '移除兼容编码', content: `移除后，仍按【${code}】鉴权的系统将判定为无权限。请确认已接入系统都已改用新编码。`, okText: '移除',
+    onOk: async () => { await api.removeCodeAlias(code); Message.success('已移除'); await loadDetail(); if (aliasMgr.open) aliasMgr.items = await api.codeAliases(app.value) } })
+}
+const aliasMgr = reactive({ open: false, items: [] as CodeAlias[] })
+async function openAliases() { Object.assign(aliasMgr, { open: true, items: await api.codeAliases(app.value) }) }
+
 // ---------------- 下级 / 谁拥有 / 变更记录
 const holders = ref<{ total: number; items: Holder[] }>({ total: 0, items: [] })
 const history = ref<HistoryItem[]>([])
@@ -313,6 +346,7 @@ function onMore(name: string) {
   if (name === 'app') Object.assign(appForm, { open: true, code: '', name: '', category: 'APPLICATION', description: '', accessControl: true })
   if (name === 'versions') openVersions()
   if (name === 'export') exportManifest()
+  if (name === 'aliases') openAliases()
 }
 /** 把当前应用的节点导出为权限清单 JSON（交给应用开发对接）。 */
 function exportManifest() {
@@ -368,6 +402,7 @@ const levelTag = (l?: number) => (l == null ? null : l >= 3 ? { t: '机密', c: 
               <DropdownItem v-if="canManage" name="app">新增应用</DropdownItem>
               <DropdownItem name="versions">发布记录</DropdownItem>
               <DropdownItem name="export">导出为权限清单</DropdownItem>
+              <DropdownItem name="aliases">兼容编码</DropdownItem>
             </DropdownMenu>
           </template>
         </Dropdown>
@@ -443,9 +478,17 @@ const levelTag = (l?: number) => (l == null ? null : l >= 3 ? { t: '机密', c: 
                 <button class="cursor-pointer border-0 bg-transparent text-[#6B7280]" title="复制" @click="copyId"><IconCopy size="small" /></button></div>
             </div>
             <div>
-              <div class="pds-label">权限编码 <span class="text-warn">{{ node.codeLocked ? '发布后锁定' : '草稿可修改，发布后锁定' }}</span></div>
+              <div class="pds-label">权限编码
+                <span class="text-warn">{{ node.codeLocked ? '已发布' : '草稿可直接修改' }}</span>
+                <button v-if="node.codeLocked && canManage && app !== 'pds'" class="pds-link ml-auto" @click="openRecode">修改编码</button>
+              </div>
               <div v-if="node.codeLocked" class="pds-readonly"><span class="pds-mono text-[14px]">{{ node.code }}</span><IconLock size="small" /></div>
               <Input v-else v-model="form.code" size="large" class="pds-mono" :disabled="!canManage" />
+              <div v-if="detail?.aliases.length" class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[12px] text-[#6B7280]">
+                兼容中的原编码：
+                <span v-for="a in detail.aliases" :key="a" class="pds-badge warn pds-mono">{{ a }}
+                  <button v-if="canManage" class="ml-1 cursor-pointer border-0 bg-transparent p-0 text-[#92400E]" title="移除兼容" @click="removeAlias(a)">×</button></span>
+              </div>
             </div>
             <div>
               <div class="pds-label">名称</div>
@@ -586,6 +629,52 @@ const levelTag = (l?: number) => (l == null ? null : l >= 3 ? { t: '机密', c: 
         </div>
         <div><div class="pds-label">描述</div><Input v-model="create.description" type="textarea" :rows="2" /></div>
       </div>
+    </PdsModal>
+
+    <!-- 修改编码 -->
+    <PdsModal v-model="recode.open" :title="`修改编码 · ${node?.name}`" width="680" ok-text="修改编码" :on-ok="submitRecode">
+      <div class="pds-form flex flex-col gap-4">
+        <div class="pds-banner warn text-[13px]">已接入的系统按编码鉴权。修改后，本节点（及所选下级）的授权、角色权限会迁移到新编码，立即生效并通知该应用。</div>
+        <div><div class="pds-label">新编码</div>
+          <Input v-model="recode.code" size="large" class="pds-mono" :placeholder="`${app}:…`" />
+          <div v-if="recode.code && !codeOk" class="mt-1 text-[12px] text-danger">须以「{{ app }}:」开头，只能包含小写字母、数字、下划线和冒号</div></div>
+        <div class="flex flex-col gap-2 text-[13px]">
+          <Checkbox v-model="recode.children">同时修改下级节点编码（以本节点编码开头的下级一起换前缀）</Checkbox>
+          <Checkbox v-model="recode.keepAlias">保留原编码兼容（推荐）：已接入系统继续按原编码鉴权，迁移完成后再到"兼容编码"中移除</Checkbox>
+        </div>
+        <div v-if="recode.impact" class="rounded-2xl bg-row p-4">
+          <div class="mb-2 flex flex-wrap gap-4 text-[13px] text-ink">
+            <span>编码 <b>{{ recode.impact.changes.length }}</b> 个</span><span>授权记录 <b>{{ recode.impact.grants }}</b> 条</span>
+            <span>角色中的权限 <b>{{ recode.impact.rolePerms }}</b> 项</span><span v-if="recode.impact.userPerms">人员明细 <b>{{ recode.impact.userPerms }}</b> 条</span>
+            <span v-if="recode.impact.aliases">已有兼容编码 <b>{{ recode.impact.aliases }}</b> 个（跟随指向新编码）</span>
+          </div>
+          <div class="max-h-[180px] overflow-auto">
+            <div v-for="c in recode.impact.changes" :key="c.nodeId" class="pds-mono py-1 text-[12px]">
+              <span class="text-[#9CA3AF]">{{ c.oldCode }}</span> → <span :class="codeOk ? 'text-accent-text' : 'text-[#9CA3AF]'">{{ codeOk ? c.newCode : '…' }}</span>
+              <span class="ml-2 font-sans text-[#6B7280]">{{ c.name }}</span>
+            </div>
+          </div>
+          <div v-if="recode.impact.unaffectedChildren.length" class="mt-2 text-[12px] text-[#6B7280]">
+            以下下级的编码不以本节点编码开头，保持不变：{{ recode.impact.unaffectedChildren.join('、') }}</div>
+        </div>
+        <div><div class="pds-label">修改原因</div><Input v-model="recode.reason" placeholder="记入审计，如：统一编码规范" /></div>
+      </div>
+    </PdsModal>
+
+    <!-- 兼容编码 -->
+    <PdsModal v-model="aliasMgr.open" title="兼容编码" width="720" hide-ok>
+      <p class="pds-muted mt-0">权限编码修改后保留的原编码：鉴权检查、权限快照、应用清单都把原编码识别为新编码。确认已接入系统都改用新编码后再移除。</p>
+      <table class="pds-table">
+        <thead><tr><th>原编码</th><th>现编码</th><th>原因</th><th>操作人</th><th>时间</th><th></th></tr></thead>
+        <tbody>
+          <tr v-for="a in aliasMgr.items" :key="a.oldCode">
+            <td class="pds-mono">{{ a.oldCode }}</td><td class="pds-mono text-ink">{{ a.newCode }}</td><td>{{ a.reason || '—' }}</td>
+            <td>{{ a.createdBy || '—' }}</td><td class="text-[#6B7280]">{{ formatTime(a.createdAt) }}</td>
+            <td><button v-if="canManage" class="pds-link red" @click="removeAlias(a.oldCode)">移除</button></td>
+          </tr>
+          <tr v-if="!aliasMgr.items.length"><td colspan="6" class="empty">该应用没有兼容中的原编码</td></tr>
+        </tbody>
+      </table>
     </PdsModal>
 
     <!-- 移动 -->

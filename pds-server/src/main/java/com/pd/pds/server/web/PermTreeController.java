@@ -31,6 +31,8 @@ public class PermTreeController {
     private final PermNodeTypeService types;
     private final AppService apps;
     private final DistributionService dist;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pd.pds.server.service.PermRecodeService recode;
 
     public PermTreeController(PermTreeService tree, PermNodeTypeService types, AppService apps, DistributionService dist) {
         this.tree = tree;
@@ -116,6 +118,29 @@ public class PermTreeController {
     @GetMapping("/perm-nodes/{id}/holders")
     public R<PermTreeDtos.Holders> holders(@PathVariable String id, @RequestParam(defaultValue = "100") int limit) {
         return R.ok(tree.holders(id, limit));
+    }
+
+    @PostMapping("/perm-nodes/{id}/recode/impact")
+    public R<com.pd.pds.server.service.PermRecodeService.Impact> recodeImpact(@PathVariable String id,
+            @RequestBody com.pd.pds.server.service.PermRecodeService.Recode req) {
+        return R.ok(recode.impact(id, req));
+    }
+
+    @PostMapping("/perm-nodes/{id}/recode")
+    public R<com.pd.pds.server.service.PermRecodeService.Impact> recode(@PathVariable String id,
+            @RequestBody com.pd.pds.server.service.PermRecodeService.Recode req) {
+        return R.ok(recode.recode(id, req));
+    }
+
+    @GetMapping("/perm-tree/{app}/aliases")
+    public R<List<com.pd.pds.server.service.PermRecodeService.AliasView>> aliases(@PathVariable String app) {
+        return R.ok(recode.aliases(app));
+    }
+
+    @DeleteMapping("/perm-code-aliases/{oldCode}")
+    public R<Void> removeAlias(@PathVariable String oldCode) {
+        recode.removeAlias(oldCode);
+        return R.ok();
     }
 
     @GetMapping("/perm-nodes/{id}/history")
