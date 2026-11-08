@@ -341,6 +341,9 @@ public class AppService {
         r.setUpdatedAt(now);
         if (isNew) {
             resourceMapper.insert(r);
+            if (r.getOwnerId() != null) {
+                authz.bumpVersion(); // 负责人默认拥有管理权，需刷新权限快照
+            }
         } else {
             resourceMapper.updateById(r);
             authz.bumpVersion();

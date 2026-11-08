@@ -257,6 +257,14 @@ class PdsIntegrationTest {
         assertThat((List<String>) JsonPath.read(snap, "$.data.resources['pdk:kb'].read")).containsExactly("kb_common", "kb_ticket");
         assertThat((List<String>) JsonPath.read(snap, "$.data.dataScopes['pdk:kb:view'].scenicIds")).containsExactly(scenicA);
 
+        // 资源负责人默认拥有该资源的管理权（如 PDK 中新建知识库的人）
+        String pdkRes = clientToken("pdk-service", "pdk-service-secret", "pds.resource");
+        api(post("/api/v1/resources"), pdkRes, "{\"type\":\"pdk:kb\",\"refId\":\"kb_owned\",\"name\":\"张三的库\",\"scenicId\":\""
+                + scenicA + "\",\"ownerId\":\"" + zhangsanId + "\"}");
+        String owned = api(get("/api/v1/authz/snapshot?app=pdk&subject=" + zhangsanId), pdk).getContentAsString();
+        assertThat((List<String>) JsonPath.read(owned, "$.data.resources['pdk:kb'].admin")).containsExactly("kb_owned");
+        assertThat((List<String>) JsonPath.read(owned, "$.data.resources['pdk:kb'].read")).contains("kb_owned", "kb_ticket");
+
         // PDK 服务客户端不能查询 PDA 的权限
         assertThat(raw(get("/api/v1/authz/snapshot?app=pda&subject=" + zhangsanId), pdk, null).getStatus()).isEqualTo(403);
 

@@ -350,7 +350,10 @@ public class AuthzService {
         Set<String> resourceIds = new HashSet<>();
         userPerms.stream().map(UserPerm::getResourceId).filter(java.util.Objects::nonNull).forEach(resourceIds::add);
         grants.forEach(g -> resourceIds.add(g.getResourceId()));
-        Map<String, PermResource> resourcesById = resourceIds.isEmpty() ? Map.of()
+        // 资源负责人（注册资源时的 ownerId）默认拥有该资源的管理权，仍受“禁止”与景区隔离约束
+        List<PermResource> owned = resourceMapper.selectList(new LambdaQueryWrapper<PermResource>().eq(PermResource::getOwnerId, userId));
+        owned.forEach(r -> resourceIds.add(r.getId()));
+        Map<String, PermResource> resourcesById = resourceIds.isEmpty() ? new HashMap<>()
                 : resourceMapper.selectByIds(resourceIds).stream().collect(Collectors.toMap(PermResource::getId, Function.identity()));
         Map<ResourceKey, Facts.Resource> resources = new HashMap<>();
         resourcesById.values().forEach(r -> {
@@ -382,6 +385,10 @@ public class AuthzService {
             grantFacts.add(new Facts.ResourceGrant(new ResourceKey(r.getTypeCode(), r.getRefId()),
                     new SubjectRef(SubjectType.valueOf(g.getSubjectType()), g.getSubjectId(), Boolean.TRUE.equals(g.getIncludeChildren())),
                     ResourceAction.of(g.getAction()), Effect.valueOf(g.getEffect()), new Validity(g.getValidFrom(), g.getValidTo())));
+        }
+        for (PermResource r : owned) {
+            grantFacts.add(new Facts.ResourceGrant(new ResourceKey(r.getTypeCode(), r.getRefId()),
+                    new SubjectRef(SubjectType.USER, userId, false), ResourceAction.ADMIN, Effect.ALLOW, Validity.ALWAYS));
         }
 
         List<Facts.SecurityLevel> levels = levelMapper.selectList(subjectFilter(new LambdaQueryWrapper<>(),
